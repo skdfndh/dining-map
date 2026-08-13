@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@500;600;700&family=ZCOOL+XiaoWei&display=swap');
+
+:root {
+  font-family: 'Noto Serif SC', serif;
+  color: #3d261f;
+  background: #f7e9d2;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --cream-50: #fffaf1;
+  --cream-100: #f7e9d2;
+  --cream-200: #ead5b5;
+  --tomato: #d94b32;
+  --tomato-dark: #9f3025;
+  --orange: #ee8a2d;
+  --soy: #3d261f;
+  --soy-soft: #74564b;
+  --sage: #7a8974;
+  --gray-past: #918b84;
+  --paper: rgba(255, 250, 241, 0.94);
+  --line-walk: #d94b32;
+  --line-cycle: #789267;
+  --line-drive: #d27825;
+  --line-transit: #387f86;
+  --line-custom: #84746d;
+  --shadow-soft: 0 14px 40px rgba(87, 44, 27, 0.14);
+  --shadow-lift: 0 20px 55px rgba(87, 44, 27, 0.22);
+  --radius-card: 24px 24px 18px 18px;
+  --ease-table: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+body {
+  overflow-x: hidden;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button {
+  min-height: 44px;
+}
+
+.display-type {
+  font-family: 'ZCOOL XiaoWei', 'Noto Serif SC', serif;
+}
+.hand-type {
+  font-family: 'Ma Shan Zheng', cursive;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

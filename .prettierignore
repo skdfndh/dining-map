@@ -1,0 +1,8 @@
+.codex/
+openspec/
+design0.md
+dist/
+node_modules/
+coverage/
+playwright-report/
+test-results/

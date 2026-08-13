@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Map-first mobile presentation
-The viewer SHALL use the map as the primary mobile surface and SHALL display each station's sequence number, short name, and exact time, fuzzy period, or `待定` directly on its marker without requiring a permanent itinerary list.
+The viewer SHALL use the map as the primary mobile surface and SHALL display each station's sequence number, short name, and exact time, fuzzy period, or `待定` directly on its marker without requiring a permanent itinerary list. When a station has an end time, its collapsed map marker SHALL display the start and end as a compact range, including the end-day offset when the range crosses into a later activity day.
 
 #### Scenario: Pending-time marker
 - **WHEN** a station has a pending time
 - **THEN** its map marker displays its number, short name, and `待定`
+
+#### Scenario: Collapsed marker with an end time
+- **WHEN** a station starts at 23:30 and ends at 01:00 on the next activity day
+- **THEN** its unopened map marker displays `23:30–01:00 · 第2天` alongside the station number and short name
 
 ### Requirement: Station and route details
 The viewer SHALL open an on-demand bottom detail card for a selected station and SHALL show full name, address, time, arrangement, participants, reminder, expense state, and navigation actions. Selecting a route segment SHALL show transport mode, distance, and duration when available.
@@ -66,4 +70,3 @@ The viewer SHALL allow a participant to choose `我是谁`, remember that stable
 #### Scenario: Reopen as selected participant
 - **WHEN** the participant returns to the same activity after choosing their identity
 - **THEN** the viewer automatically highlights that participant's settlement unless the selection is changed
-

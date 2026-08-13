@@ -3,6 +3,8 @@
 ### Requirement: Station and global expense items
 The editor SHALL allow an expense to belong to a specific station or to the activity as a whole. An expense MAY be created with no amount and MAY be added after the activity.
 
+The editor SHALL visibly indicate when the expense workspace is selected, using both color and programmatic current-state semantics.
+
 #### Scenario: Pre-create dinner expense
 - **WHEN** the organizer creates a dinner expense before the event without entering an amount
 - **THEN** the system stores the amount as pending rather than zero
@@ -70,4 +72,3 @@ The viewer SHALL show `我的账单`, `我的转账`, and `全部结算` section
 #### Scenario: Inspect one station expense
 - **WHEN** a participant expands a station-linked dinner expense
 - **THEN** the viewer displays the station, allocation method, included shares, and payer amounts used in the calculation
-

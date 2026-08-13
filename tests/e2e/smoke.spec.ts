@@ -1,0 +1,96 @@
+import { expect, test } from '@playwright/test';
+
+test('viewer shows map-first activity and expenses', async ({ page }) => {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: '秋日朋友聚餐' })).toBeVisible();
+  await page.getByRole('button', { name: /老街火锅/ }).click();
+  await expect(page.getByRole('heading', { name: '老街火锅馆' })).toBeVisible();
+  await page.getByRole('button', { name: '关闭详情' }).click();
+  await page.getByRole('button', { name: /费用/ }).click();
+  await expect(page.getByRole('heading', { name: '聚餐费用' })).toBeVisible();
+});
+
+test('editor login gate opens the workspace', async ({ page }) => {
+  await page.goto('/editor.html', { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('编辑器密码').fill('dinner');
+  await page.getByRole('button', { name: '入席编辑' }).click();
+  await expect(page.getByRole('heading', { name: /聚餐地图 · 行程编排台/ })).toBeVisible();
+});
+
+test('editor highlights expenses and starts a blank activity', async ({ page }) => {
+  await page.goto('/editor.html', { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('编辑器密码').fill('dinner');
+  await page.getByRole('button', { name: '入席编辑' }).click();
+  await page.getByLabel('活动名称').fill('待恢复的周末聚餐');
+
+  const expenseTab = page.getByRole('button', { name: '费用', exact: true });
+  await expenseTab.click();
+  await expect(expenseTab).toHaveAttribute('aria-current', 'page');
+  await expect(expenseTab).toHaveClass(/active/);
+  await expect(expenseTab).toHaveCSS('background-color', 'rgba(217, 75, 50, 0.14)');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: '新建聚餐' }).click();
+  await expect(page.getByLabel('活动名称')).toHaveValue('');
+  await expect(page.getByRole('button', { name: '活动', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(page.getByText(/已新建空白聚餐/)).toBeVisible();
+  await page.getByLabel('省份').selectOption({ label: '广东省' });
+  await expect(page.getByLabel('城市')).toHaveValue('440100');
+  await page.getByLabel('区县（可选）').selectOption({ label: '天河区' });
+  await expect(page.getByText(/广东省 · 广州市 · 天河区/)).toBeVisible();
+  await expect(page.getByText(/地图将以/)).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: '恢复上个活动' }).click();
+  await expect(page.getByLabel('活动名称')).toHaveValue('待恢复的周末聚餐');
+});
+
+test('editor quickly deletes a station from the unscheduled area', async ({ page }) => {
+  await page.goto('/editor.html', { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('编辑器密码').fill('dinner');
+  await page.getByRole('button', { name: '入席编辑' }).click();
+  await page.getByRole('button', { name: '按时间重新排序' }).click();
+
+  const deleteButton = page.getByRole('button', { name: '删除待安排地点 江边散步' });
+  await expect(deleteButton).toBeVisible();
+  await deleteButton.click();
+
+  await expect(deleteButton).not.toBeVisible();
+  await expect(page.locator('.map-station-marker', { hasText: '江边散步' })).toHaveCount(0);
+});
+
+test('editor bulk-fills only sortable stations while preserving manual order', async ({ page }) => {
+  await page.goto('/editor.html', { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('编辑器密码').fill('dinner');
+  await page.getByRole('button', { name: '入席编辑' }).click();
+  await page.getByRole('button', { name: '按时间重新排序' }).click();
+  await page.locator('.unscheduled-main', { hasText: '江边散步' }).click();
+  await page.getByRole('button', { name: '时段', exact: true }).click();
+
+  const fillButton = page.getByRole('button', { name: /一键填入\s*1/ });
+  await expect(fillButton).toBeEnabled();
+  await fillButton.click();
+
+  await expect(page.locator('.itinerary-flow .flow-station strong')).toHaveText([
+    '檐下咖啡',
+    '夜猫 KTV',
+    '老街火锅',
+    '江边散步',
+  ]);
+  await expect(page.getByRole('button', { name: '一键填入', exact: true })).toBeDisabled();
+});
+
+test('editor automatically recalculates a selected cycling route', async ({ page }) => {
+  await page.goto('/editor.html', { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('编辑器密码').fill('dinner');
+  await page.getByRole('button', { name: '入席编辑' }).click();
+
+  await page.locator('.flow-route').first().click();
+  await page.getByLabel('交通方式').selectOption('cycling');
+
+  await expect(page.getByText('已冻结', { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.route-stats').getByText(/km/)).not.toHaveText('—');
+  await expect(page.locator('.route-stats').getByText(/分钟/)).not.toHaveText('—');
+});

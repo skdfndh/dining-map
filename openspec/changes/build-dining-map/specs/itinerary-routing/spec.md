@@ -9,7 +9,15 @@ The editor SHALL allow a station to be selected through AMap keyword/address sea
 
 #### Scenario: Long-press selection
 - **WHEN** the organizer long-presses a map coordinate
-- **THEN** the editor creates a candidate station at that coordinate and allows missing descriptive fields to be completed manually
+- **THEN** the editor reverse-geocodes that coordinate, creates a candidate station with the closest available POI or formatted road address, and allows any remaining descriptive fields to be completed manually
+
+#### Scenario: Select a hovered map label
+- **WHEN** the organizer points at an interactive AMap place label and right-clicks without moving away
+- **THEN** the editor selects that exact hotspot name, POI ID, and coordinate instead of choosing the nearest reverse-geocoding result
+
+#### Scenario: Reverse-geocoding unavailable
+- **WHEN** reverse geocoding fails after the organizer selects a map coordinate
+- **THEN** the editor retains the coordinate as a manually editable station and clearly reports that its name and address need confirmation
 
 ### Requirement: Sharing-link fallback
 The system SHALL attempt to extract useful destination information from supported AMap and Baidu Maps sharing links. A parsing or cross-origin failure SHALL lead to an explicit search-or-manual-selection fallback and SHALL NOT discard the pasted link before the organizer can inspect it.
@@ -26,11 +34,19 @@ The editor SHALL support walking, cycling, driving, taxi, public transport, and 
 - **THEN** the system requests a driving route and stores the segment transport type as taxi
 
 ### Requirement: Route calculation and freezing
-For non-custom transport, the editor SHALL request a real road route from AMap and SHALL store the resulting distance, duration, road geometry, calculation timestamp, and source status in the event data. The viewer SHALL be able to render the segment without recalculating it.
+For non-custom transport, the editor SHALL automatically request a real road route from AMap whenever a new adjacent segment is created or its transport mode changes, using walking as the default mode. The editor SHALL store the resulting distance, duration, road geometry, calculation timestamp, and source status in the event data. It SHALL NOT classify a result without valid road geometry as ready. The viewer SHALL be able to render the segment without recalculating it.
 
 #### Scenario: Successful walking calculation
 - **WHEN** AMap returns a walking route between adjacent stations
 - **THEN** the editor freezes its geometry, distance, and duration into the exported activity
+
+#### Scenario: New adjacency defaults to walking roads
+- **WHEN** the organizer adds or reorders stations so that a new adjacent segment is created
+- **THEN** the editor automatically calculates and displays a reachable walking route without requiring a route-card click
+
+#### Scenario: Cycling geometry is returned
+- **WHEN** the organizer changes a segment to cycling and AMap returns riding steps
+- **THEN** the editor parses and freezes the riding road geometry instead of replacing it with a straight endpoint line
 
 ### Requirement: Incremental route invalidation
 The editor SHALL retain route segments whose ordered endpoint IDs and transport settings remain unchanged, and SHALL invalidate and recalculate only segments affected by station insertion, removal, movement, coordinate change, or transport change.
@@ -52,4 +68,3 @@ The editor SHALL expose a manual action to recalculate stale or selected automat
 #### Scenario: Refresh frozen route
 - **WHEN** the organizer requests recalculation for an existing automatic segment
 - **THEN** the editor replaces the prior frozen route only after a valid new result is received
-
