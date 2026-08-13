@@ -13,7 +13,7 @@
 
 ## 当前完成度
 
-OpenSpec 变更名称为 `build-dining-map`，采用 `spec-driven` 工作流。目前 76 项任务中已完成 71 项，剩余 5 项均为正式发布前或真实设备验收任务。
+OpenSpec 变更名称为 `build-dining-map`，采用 `spec-driven` 工作流。目前 76 项任务中已完成 72 项，剩余 4 项均为正式发布前或真实设备验收任务。
 
 已实现的主要能力：
 
@@ -51,6 +51,8 @@ OpenSpec 变更名称为 `build-dining-map`，采用 `spec-driven` 工作流。�
 - 29 个单元与组件测试通过。
 - 12 个桌面/窄屏端到端场景已覆盖；一次展示页首次导航出现环境性超时，单独复跑后通过。
 - 本地高德地图实测确认默认步行自动算路和骑行自动重算有效。
+- GitHub Pages 线上验收通过：展示页、编辑器、`event.json` 和两页引用的构建资源均返回 HTTP 200。
+- 线上示例活动包含 4 个地点、3 段已冻结路线，3 段路线的折线几何均可从 `event.json` 正常读取。
 
 ## 本地使用
 
@@ -83,7 +85,10 @@ npm run dev -- --host 127.0.0.1
 ## GitHub 与安全状态
 
 - 部署工作流位于 `.github/workflows/deploy-pages.yml`，只在 `main` 分支推送后部署。
+- GitHub Pages 已启用并成功完成首次部署，正式地址为 `https://skdfndh.github.io/dining-map/`。
+- 当前完整实现已提交并推送到 `main`；首次成功部署包含提交 `49d5fb5`。
 - 工作流从 GitHub Actions Secrets 读取 `VITE_AMAP_KEY` 和 `VITE_AMAP_SECURITY_CODE`。
+- 上述两个 Secrets 已配置；真实值只保存在本地被忽略的 `.env.local` 和 GitHub Secrets 中，未提交到仓库。
 - `.env.local`、构建产物、依赖目录和测试产物均被 Git 忽略。
 - 纯静态前端无法真正隐藏 Web JS API 凭据。正式对外使用前，必须在高德控制台把该 Key 的允许域名限制为 `skdfndh.github.io`，不要给它开放任意来源。
 - 当前简单密码也不能保护公开源码或活动数据，不应在活动中填写敏感隐私。
@@ -92,14 +97,11 @@ npm run dev -- --host 127.0.0.1
 
 按优先级继续：
 
-1. 合并当前实现分支到 `main`，触发首次 GitHub Pages 部署。
-2. 确认仓库 `Settings → Pages` 的 Source 为 `GitHub Actions`。
-3. 检查首次部署工作流并验证展示页、编辑器、静态资源和 `public/event.json` 在项目子路径正常加载。
-4. 在高德控制台配置 `skdfndh.github.io` 域名白名单；如当前凭据曾用于其他场景，正式发布前轮换为此项目专用凭据。
-5. 在桌面 Chrome/Edge/Firefox 和真实 iOS/Android 手机完成布局、横竖屏、文字溢出与安全区验收。
-6. 完成键盘操作、焦点、对比度、减少动画和地图错误界面验收。
-7. 使用 iOS/Android 普通浏览器及微信内置浏览器，填写 `docs/navigation-test-matrix.md` 中的高德/百度导航结果。
-8. 所有发布验收完成后，将 OpenSpec `build-dining-map` 变更归档。
+1. 在高德控制台配置 `skdfndh.github.io` 域名白名单；如当前凭据曾用于其他场景，正式发布前轮换为此项目专用凭据。
+2. 在桌面 Chrome/Edge/Firefox 和真实 iOS/Android 手机完成布局、横竖屏、文字溢出与安全区验收。
+3. 完成键盘操作、焦点、对比度、减少动画和地图错误界面验收。
+4. 使用 iOS/Android 普通浏览器及微信内置浏览器，填写 `docs/navigation-test-matrix.md` 中的高德/百度导航结果。
+5. 所有发布验收完成后，将 OpenSpec `build-dining-map` 变更归档。
 
 ## 下次继续时建议先检查
 
@@ -111,4 +113,4 @@ npm run test
 gh run list --repo skdfndh/dining-map --workflow "Deploy GitHub Pages" --limit 5
 ```
 
-如果 GitHub Pages 尚未上线，优先检查：当前分支是否已合并到 `main`、Actions Secrets 是否存在、Pages Source 是否为 GitHub Actions，以及高德域名白名单是否允许正式站点。
+如果后续部署失败，优先检查最近一次 GitHub Actions 日志、Actions Secrets 是否仍存在，以及 Pages Source 是否仍为 GitHub Actions。若网站能打开但地图报错，优先检查高德域名白名单是否允许正式站点。
