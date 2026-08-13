@@ -1,0 +1,36 @@
+# Dependencies and build output
+node_modules/
+dist/
+.vite/
+coverage/
+playwright-report/
+test-results/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+config/local.*
+config/secrets.*
+public/runtime-config.local.*
+
+# Local drafts and exports
+drafts/
+exports/
+*.local.json
+*.draft.json
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
