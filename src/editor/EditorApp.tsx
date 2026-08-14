@@ -12,6 +12,7 @@ import {
   KeyRound,
   LogOut,
   MapPin,
+  PencilLine,
   Plus,
   RefreshCw,
   Route,
@@ -204,11 +205,13 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   const [searchResults, setSearchResults] = useState<PlaceCandidate[]>([]);
   const [searchMessage, setSearchMessage] = useState('');
   const [areaFocusSignal, setAreaFocusSignal] = useState<string>();
+  const [participantEditorOpen, setParticipantEditorOpen] = useState(false);
   const [participantHistory, setParticipantHistory] = useState(loadParticipantHistory);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyInitial, setHistoryInitial] = useState('ALL');
   const [historyNotice, setHistoryNotice] = useState('');
   const importedRef = useRef<HTMLInputElement>(null);
+  const participantEditButtonRef = useRef<HTMLButtonElement>(null);
   const draftLoadedRef = useRef(false);
   const areaRequestRef = useRef(0);
   const newParticipantIdsRef = useRef(new Set<EntityId>());
@@ -260,15 +263,20 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
     autosave(event, setSaveStatus);
   }, [event]);
   useEffect(() => {
-    if (!preview && !draftBoxOpen) return;
+    if (!preview && !draftBoxOpen && !participantEditorOpen) return;
     const closeOverlay = (keyboardEvent: KeyboardEvent) => {
       if (keyboardEvent.key !== 'Escape') return;
       if (preview) setPreview(false);
-      else setDraftBoxOpen(false);
+      else if (draftBoxOpen) setDraftBoxOpen(false);
+      else {
+        setParticipantEditorOpen(false);
+        setHistoryOpen(false);
+        window.setTimeout(() => participantEditButtonRef.current?.focus(), 0);
+      }
     };
     window.addEventListener('keydown', closeOverlay);
     return () => window.removeEventListener('keydown', closeOverlay);
-  }, [draftBoxOpen, preview]);
+  }, [draftBoxOpen, participantEditorOpen, preview]);
   const staleRouteSignature = event.routes
     .filter((route) => route.status === 'stale')
     .map((route) => route.identityKey)
@@ -609,6 +617,11 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
       setEventSwitching(false);
     }
   }
+  function closeParticipantEditor() {
+    setParticipantEditorOpen(false);
+    setHistoryOpen(false);
+    window.setTimeout(() => participantEditButtonRef.current?.focus(), 0);
+  }
 
   return (
     <main className="editor-shell">
@@ -718,152 +731,32 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
               </button>
             ))}
           </section>
-          <section className="resource-section">
-            <div className="section-heading">
+          <section className="resource-section participant-summary-section">
+            <div className="participant-summary-heading">
               <h2>
                 <Users />
                 参与人
+                <small>{event.participants.length}</small>
               </h2>
               <button
-                aria-label="添加参与人"
-                aria-expanded={historyOpen}
-                aria-controls="participant-history-picker"
-                className={historyOpen ? 'active' : ''}
-                onClick={() => {
-                  setHistoryOpen((open) => !open);
-                  setHistoryNotice('');
-                }}
+                ref={participantEditButtonRef}
+                className="participant-edit-button"
+                aria-haspopup="dialog"
+                onClick={() => setParticipantEditorOpen(true)}
               >
-                <Plus />
+                <PencilLine />
+                编辑参与人
               </button>
             </div>
-            {historyOpen && (
-              <div
-                className="participant-history-picker"
-                id="participant-history-picker"
-                role="region"
-                aria-labelledby="participant-history-title"
-              >
-                <div className="history-picker-title">
-                  <span>
-                    <History />
-                    <strong id="participant-history-title">历史参与人</strong>
-                  </span>
-                  <small>保存在此浏览器</small>
-                </div>
-                {participantHistory.length ? (
-                  <>
-                    <div className="history-initials" aria-label="按姓名首字母筛选">
-                      <button
-                        className={historyInitial === 'ALL' ? 'active' : ''}
-                        aria-pressed={historyInitial === 'ALL'}
-                        onClick={() => setHistoryInitial('ALL')}
-                      >
-                        全部
-                      </button>
-                      {availableHistoryInitials.map((initial) => (
-                        <button
-                          key={initial}
-                          className={historyInitial === initial ? 'active' : ''}
-                          aria-pressed={historyInitial === initial}
-                          aria-label={`查看 ${initial} 开头的参与人`}
-                          onClick={() => setHistoryInitial(initial)}
-                        >
-                          {initial}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="history-people">
-                      {visibleHistory.map((entry, index) => {
-                        const key = participantHistoryKey(entry);
-                        const added = currentParticipantKeys.has(key);
-                        const initial = participantHistoryInitial(entry.name);
-                        const previousInitial =
-                          index > 0
-                            ? participantHistoryInitial(visibleHistory[index - 1].name)
-                            : '';
-                        return (
-                          <div className="history-person-group" key={key}>
-                            {historyInitial === 'ALL' && initial !== previousInitial && (
-                              <b className="history-letter" aria-hidden="true">
-                                {initial}
-                              </b>
-                            )}
-                            <button
-                              className="history-person"
-                              disabled={added}
-                              aria-label={`${added ? '已添加' : '添加历史参与人'} ${entry.name}${entry.note ? `，${entry.note}` : ''}`}
-                              onClick={() => addHistoricalParticipant(entry)}
-                            >
-                              <span>
-                                <strong>{entry.name}</strong>
-                                {entry.note && <small>{entry.note}</small>}
-                              </span>
-                              <em>{added ? '已添加' : '添加'}</em>
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                ) : (
-                  <p className="history-empty">还没有历史记录，先新建一位参与人吧。</p>
-                )}
-                <button className="history-create-button" onClick={addNewParticipant}>
-                  <UserPlus />
-                  新建参与人
-                </button>
-              </div>
-            )}
-            {historyNotice && (
-              <span className="sr-only" role="status" aria-live="polite">
-                {historyNotice}
-              </span>
-            )}
-            {event.participants.map((participant) => (
-              <div className="person-row" key={participant.id}>
-                <input
-                  value={participant.name}
-                  aria-label={`参与人姓名：${participant.name || '未命名'}`}
-                  onFocus={() => {
-                    if (!newParticipantIdsRef.current.delete(participant.id)) return;
-                    setEvent((current) => ({
-                      ...current,
-                      participants: updateById(current.participants, participant.id, { name: '' }),
-                    }));
-                  }}
-                  onChange={(e) =>
-                    setEvent({
-                      ...event,
-                      participants: updateById(event.participants, participant.id, {
-                        name: e.target.value,
-                      }),
-                    })
-                  }
-                  onBlur={() => rememberParticipantsInHistory([participant])}
-                />
-                <input
-                  value={participant.note ?? ''}
-                  aria-label={`参与人备注：${participant.name || '未命名'}`}
-                  placeholder="备注"
-                  onChange={(e) =>
-                    setEvent({
-                      ...event,
-                      participants: updateById(event.participants, participant.id, {
-                        note: e.target.value,
-                      }),
-                    })
-                  }
-                  onBlur={() => rememberParticipantsInHistory([participant])}
-                />
-                <button
-                  aria-label={`删除参与人 ${participant.name || '未命名'}`}
-                  onClick={() => deleteParticipant(participant)}
-                >
-                  <X />
-                </button>
-              </div>
-            ))}
+            <div className="participant-name-strip" aria-label="当前参与人">
+              {event.participants.length ? (
+                event.participants.map((participant) => (
+                  <span key={participant.id}>{participant.name || '未命名'}</span>
+                ))
+              ) : (
+                <em>尚未添加参与人</em>
+              )}
+            </div>
           </section>
           <section className="resource-section unscheduled">
             <div className="section-heading">
@@ -1124,6 +1017,209 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
       </footer>
+      {participantEditorOpen && (
+        <div
+          className="modal-backdrop participant-focus-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="participant-editor-title"
+          onMouseDown={(mouseEvent) => {
+            if (mouseEvent.target === mouseEvent.currentTarget) closeParticipantEditor();
+          }}
+        >
+          <section className="participant-focus-modal">
+            <header>
+              <div>
+                <p className="eyebrow">GUEST LIST</p>
+                <h2 className="display-type" id="participant-editor-title">
+                  参与人名单
+                </h2>
+                <p>集中编辑姓名与备注；长名单会在此面板内滚动。</p>
+              </div>
+              <div className="participant-focus-actions">
+                <span>{event.participants.length} 人</span>
+                <button
+                  className={`participant-add-button ${historyOpen ? 'active' : ''}`}
+                  aria-label="添加参与人"
+                  aria-expanded={historyOpen}
+                  aria-controls="participant-history-picker"
+                  onClick={() => {
+                    setHistoryOpen((open) => !open);
+                    setHistoryNotice('');
+                  }}
+                >
+                  <UserPlus />
+                  {historyOpen ? '收起备选' : '添加参与人'}
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label="关闭参与人编辑"
+                  autoFocus
+                  onClick={closeParticipantEditor}
+                >
+                  <X />
+                </button>
+              </div>
+            </header>
+            <div className={`participant-focus-workspace ${historyOpen ? 'history-open' : ''}`}>
+              {historyOpen && (
+                <div
+                  className="participant-history-picker"
+                  id="participant-history-picker"
+                  role="region"
+                  aria-labelledby="participant-history-title"
+                >
+                  <div className="history-picker-title">
+                    <span>
+                      <History />
+                      <strong id="participant-history-title">历史参与人</strong>
+                    </span>
+                    <small>保存在此浏览器</small>
+                  </div>
+                  {participantHistory.length ? (
+                    <>
+                      <div className="history-initials" aria-label="按姓名首字母筛选">
+                        <button
+                          className={historyInitial === 'ALL' ? 'active' : ''}
+                          aria-pressed={historyInitial === 'ALL'}
+                          onClick={() => setHistoryInitial('ALL')}
+                        >
+                          全部
+                        </button>
+                        {availableHistoryInitials.map((initial) => (
+                          <button
+                            key={initial}
+                            className={historyInitial === initial ? 'active' : ''}
+                            aria-pressed={historyInitial === initial}
+                            aria-label={`查看 ${initial} 开头的参与人`}
+                            onClick={() => setHistoryInitial(initial)}
+                          >
+                            {initial}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="history-people">
+                        {visibleHistory.map((entry, index) => {
+                          const key = participantHistoryKey(entry);
+                          const added = currentParticipantKeys.has(key);
+                          const initial = participantHistoryInitial(entry.name);
+                          const previousInitial =
+                            index > 0
+                              ? participantHistoryInitial(visibleHistory[index - 1].name)
+                              : '';
+                          return (
+                            <div className="history-person-group" key={key}>
+                              {historyInitial === 'ALL' && initial !== previousInitial && (
+                                <b className="history-letter" aria-hidden="true">
+                                  {initial}
+                                </b>
+                              )}
+                              <button
+                                className="history-person"
+                                disabled={added}
+                                aria-label={`${added ? '已添加' : '添加历史参与人'} ${entry.name}${entry.note ? `，${entry.note}` : ''}`}
+                                onClick={() => addHistoricalParticipant(entry)}
+                              >
+                                <span>
+                                  <strong>{entry.name}</strong>
+                                  {entry.note && <small>{entry.note}</small>}
+                                </span>
+                                <em>{added ? '已添加' : '添加'}</em>
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="history-empty">还没有历史记录，先新建一位参与人吧。</p>
+                  )}
+                  <button className="history-create-button" onClick={addNewParticipant}>
+                    <UserPlus />
+                    新建参与人
+                  </button>
+                </div>
+              )}
+              <section className="participant-current-list" aria-labelledby="current-guests-title">
+                <div className="participant-current-heading">
+                  <div>
+                    <strong id="current-guests-title">本次已选</strong>
+                    <small>姓名会显示在折叠摘要和各站参与人中</small>
+                  </div>
+                  {!historyOpen && (
+                    <button className="history-create-button" onClick={addNewParticipant}>
+                      <Plus />
+                      直接新建
+                    </button>
+                  )}
+                </div>
+                {historyNotice && (
+                  <span className="sr-only" role="status" aria-live="polite">
+                    {historyNotice}
+                  </span>
+                )}
+                <div className="participant-edit-list">
+                  {event.participants.length ? (
+                    event.participants.map((participant, index) => (
+                      <div className="person-row" key={participant.id}>
+                        <b aria-hidden="true">{index + 1}</b>
+                        <input
+                          value={participant.name}
+                          aria-label={`参与人姓名：${participant.name || '未命名'}`}
+                          onFocus={() => {
+                            if (!newParticipantIdsRef.current.delete(participant.id)) return;
+                            setEvent((current) => ({
+                              ...current,
+                              participants: updateById(current.participants, participant.id, {
+                                name: '',
+                              }),
+                            }));
+                          }}
+                          onChange={(e) =>
+                            setEvent({
+                              ...event,
+                              participants: updateById(event.participants, participant.id, {
+                                name: e.target.value,
+                              }),
+                            })
+                          }
+                          onBlur={() => rememberParticipantsInHistory([participant])}
+                        />
+                        <input
+                          value={participant.note ?? ''}
+                          aria-label={`参与人备注：${participant.name || '未命名'}`}
+                          placeholder="备注（可选）"
+                          onChange={(e) =>
+                            setEvent({
+                              ...event,
+                              participants: updateById(event.participants, participant.id, {
+                                note: e.target.value,
+                              }),
+                            })
+                          }
+                          onBlur={() => rememberParticipantsInHistory([participant])}
+                        />
+                        <button
+                          aria-label={`删除参与人 ${participant.name || '未命名'}`}
+                          onClick={() => deleteParticipant(participant)}
+                        >
+                          <X />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="participant-empty-state">
+                      <Users />
+                      <strong>这次聚餐还没有参与人</strong>
+                      <span>可以直接新建，或从浏览器历史名单中选择。</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      )}
       {draftBoxOpen && (
         <DraftBoxModal
           drafts={savedDrafts}

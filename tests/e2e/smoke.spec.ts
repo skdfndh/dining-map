@@ -155,6 +155,10 @@ test('editor filters and adds a historical participant by initial', async ({ pag
   await page.getByLabel('编辑器密码').fill('dinner');
   await page.getByRole('button', { name: '入席编辑' }).click();
 
+  await expect(page.getByLabel('当前参与人')).toBeVisible();
+  await expect(page.getByLabel(/参与人姓名/)).toHaveCount(0);
+  await page.getByRole('button', { name: '编辑参与人' }).click();
+  await expect(page.getByRole('dialog', { name: '参与人名单' })).toBeVisible();
   await page.getByRole('button', { name: '添加参与人' }).click();
   await page.getByRole('button', { name: '查看 Z 开头的参与人' }).click();
   await expect(page.getByRole('button', { name: /白露/ })).toHaveCount(0);
@@ -162,6 +166,9 @@ test('editor filters and adds a historical participant by initial', async ({ pag
 
   await expect(page.getByLabel('参与人姓名：张三')).toHaveValue('张三');
   await expect(page.getByRole('button', { name: '已添加 张三，高中同学' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '参与人名单' })).toHaveCount(0);
+  await expect(page.getByLabel('当前参与人')).toContainText('张三');
 });
 
 test('editor restores and deletes activities from the automatic draft box', async ({ page }) => {

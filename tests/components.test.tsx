@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createSampleEvent } from '../src/domain/sample';
 import { MapCanvas } from '../src/components/MapCanvas';
@@ -52,6 +52,7 @@ describe('editor participants', () => {
     render(<EditorApp />);
 
     await screen.findByText('草稿已保存');
+    fireEvent.click(screen.getByRole('button', { name: '编辑参与人' }));
     fireEvent.click(screen.getByRole('button', { name: '添加参与人' }));
     fireEvent.click(screen.getByRole('button', { name: '新建参与人' }));
     const nameInput = screen.getByDisplayValue('新参与人');
@@ -86,6 +87,7 @@ describe('editor participants', () => {
     render(<EditorApp />);
 
     await screen.findByText('草稿已保存');
+    fireEvent.click(screen.getByRole('button', { name: '编辑参与人' }));
     fireEvent.click(screen.getByRole('button', { name: '添加参与人' }));
     fireEvent.click(screen.getByRole('button', { name: '查看 Z 开头的参与人' }));
 
@@ -93,5 +95,27 @@ describe('editor participants', () => {
     fireEvent.click(screen.getByRole('button', { name: '添加历史参与人 张三，同学' }));
     expect(screen.getByLabelText('参与人姓名：张三')).toHaveValue('张三');
     expect(screen.getByRole('button', { name: '已添加 张三，同学' })).toBeDisabled();
+  });
+
+  it('keeps participants compact until the focused editor is opened', async () => {
+    grantEditorSession();
+    render(<EditorApp />);
+
+    await screen.findByText('草稿已保存');
+    const editButton = screen.getByRole('button', { name: '编辑参与人' });
+    const firstParticipantName = createSampleEvent().participants[0].name;
+    expect(screen.getByLabelText('当前参与人')).toHaveTextContent(firstParticipantName);
+    expect(screen.queryByRole('dialog', { name: '参与人名单' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(`参与人姓名：${firstParticipantName}`)).not.toBeInTheDocument();
+
+    fireEvent.click(editButton);
+    expect(screen.getByRole('dialog', { name: '参与人名单' })).toBeVisible();
+    expect(screen.getByLabelText(`参与人姓名：${firstParticipantName}`)).toHaveValue(
+      firstParticipantName,
+    );
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: '参与人名单' })).not.toBeInTheDocument();
+    await waitFor(() => expect(editButton).toHaveFocus());
   });
 });
