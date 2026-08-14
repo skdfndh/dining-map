@@ -67,6 +67,9 @@
 .route-sketch path.dashed {
   stroke-dasharray: 5 5;
 }
+.route-sketch path.not-mine {
+  opacity: 0.28;
+}
 .table-marker,
 .amap-table-marker {
   border: 0;
@@ -133,6 +136,33 @@
 .amap-table-marker.is-past {
   filter: grayscale(0.58) brightness(0.9);
   opacity: 0.72;
+}
+.table-marker.is-mine,
+.amap-table-marker.is-mine {
+  box-shadow:
+    0 0 0 3px rgba(120, 146, 103, 0.5),
+    0 8px 22px rgba(83, 43, 26, 0.2);
+}
+.table-marker.not-mine,
+.amap-table-marker.not-mine {
+  filter: grayscale(0.72) brightness(0.94);
+  opacity: 0.58;
+}
+.identity-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #456047;
+  background: rgba(120, 146, 103, 0.16);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.not-mine .identity-badge {
+  color: var(--soy-soft);
+  background: rgba(116, 98, 88, 0.1);
 }
 .amap-table-marker {
   position: relative;

@@ -22,11 +22,23 @@ test('viewer shows map-first activity and expenses', async ({ page }) => {
   await page.getByLabel('查看密码').fill(VIEWER_TEST_PASSWORD);
   await page.getByRole('button', { name: '解锁聚餐地图' }).click();
   await expect(page.getByRole('heading', { name: '秋日朋友聚餐' })).toBeVisible();
+  await page.getByRole('button', { name: '我是谁', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '我是谁' })).toBeVisible();
+  await page.getByRole('button', { name: /小王/ }).click();
+  await expect(page.getByText('正在以 小王 的身份查看')).toBeVisible();
+  await expect(page.locator('.amap-table-marker.is-mine')).toHaveCount(3);
+  await expect(page.locator('.amap-table-marker.not-mine')).toHaveCount(1);
   await page.getByRole('button', { name: /老街火锅/ }).click();
   await expect(page.getByRole('heading', { name: '老街火锅馆' })).toBeVisible();
+  await expect(page.getByText('小王 · 我')).toBeVisible();
+  await expect(page.getByText('小王参加这一站')).toBeVisible();
+  const baiduNavigation = page.getByRole('link', { name: '百度导航' });
+  await expect(baiduNavigation).toHaveAttribute('href', /output=html/);
+  await expect(baiduNavigation).toHaveAttribute('href', /src=webapp\.skdfndh\.diningmap/);
   await page.getByRole('button', { name: '关闭地点详情' }).click();
   await page.getByRole('button', { name: /费用/ }).click();
   await expect(page.getByRole('heading', { name: '聚餐费用' })).toBeVisible();
+  await expect(page.locator('.who-am-i select')).toHaveValue('p_wang');
 });
 
 test('editor login gate opens the workspace', async ({ page }) => {

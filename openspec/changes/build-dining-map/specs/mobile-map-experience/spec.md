@@ -79,6 +79,21 @@ Each station detail SHALL provide AMap and Baidu Maps navigation actions targeti
 - **WHEN** a navigation action cannot be completed in the embedded browser
 - **THEN** the viewer keeps all station details accessible and shows system-browser and address-copy alternatives
 
+#### Scenario: Open Baidu web navigation
+- **WHEN** a participant chooses Baidu navigation for a station
+- **THEN** the viewer opens Baidu's web direction service with the GCJ-02 destination, required HTML output, and a valid web application source identifier
+
+### Requirement: Personal itinerary focus
+The viewer SHALL expose `我是谁` from the map surface independently of settlement status. After a participant selects a stable participant ID, the map SHALL label stations they attend as `有我`, label stations they do not attend as `不参加`, visually prioritize relevant stations and route segments without hiding the complete itinerary, and show the same identity in station details and expense settlement. The selection SHALL remain local to that browser.
+
+#### Scenario: Select identity before expenses are published
+- **WHEN** settlement has not started and a participant selects `我是谁` from the map toolbar
+- **THEN** attended and unattended stations are immediately distinguishable while every station remains available
+
+#### Scenario: Inspect personal attendance at a station
+- **WHEN** an identified participant opens a station detail
+- **THEN** the viewer highlights that participant in the station list and explicitly states whether they attend the station
+
 ### Requirement: Personal expense focus
 The viewer SHALL allow a participant to choose `我是谁`, remember that stable participant ID locally, and use it to highlight personal expense and transfer information while keeping the complete settlement visible.
 

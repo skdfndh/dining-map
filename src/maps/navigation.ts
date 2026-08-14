@@ -17,7 +17,8 @@ export function baiduNavigationUrl(station: Station): string {
     destination: `latlng:${station.coordinate.lat},${station.coordinate.lng}|name:${station.name}`,
     coord_type: 'gcj02',
     mode: 'driving',
-    src: 'dining-map',
+    output: 'html',
+    src: 'webapp.skdfndh.diningmap',
   });
   return `https://api.map.baidu.com/direction?${params}`;
 }

@@ -14,8 +14,23 @@ import { createHotspotTracker, resolveMapPickTarget } from '../src/maps/pick';
 import { areaSearchRequest, buildArea } from '../src/domain/areas';
 import { decideMapViewport } from '../src/maps/viewport';
 import { resolveOfflineAreaCenter } from '../src/domain/area-center';
+import { baiduNavigationUrl } from '../src/maps/navigation';
 
 describe('maps and progress', () => {
+  it('builds a valid Baidu web navigation URL', () => {
+    const station = createSampleEvent().stations[0];
+    const url = new URL(baiduNavigationUrl(station));
+
+    expect(url.origin).toBe('https://api.map.baidu.com');
+    expect(url.pathname).toBe('/direction');
+    expect(url.searchParams.get('output')).toBe('html');
+    expect(url.searchParams.get('src')).toBe('webapp.skdfndh.diningmap');
+    expect(url.searchParams.get('coord_type')).toBe('gcj02');
+    expect(url.searchParams.get('destination')).toBe(
+      `latlng:${station.coordinate.lat},${station.coordinate.lng}|name:${station.name}`,
+    );
+  });
+
   it('uses administrative codes and the matching AMap level for area lookup', () => {
     const city = buildArea('440000', '440100');
     const district = buildArea('440000', '440100', '440106');

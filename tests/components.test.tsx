@@ -44,6 +44,19 @@ describe('map components', () => {
     expect(marker.textContent).toContain('<img src=x onerror=alert(1)>危险店名');
     expect(marker.querySelector('b')?.textContent).toBe('待');
   });
+
+  it('labels whether the selected participant attends a station', () => {
+    const station = createSampleEvent().stations[0];
+    const mine = createStationMarkerContent(station, 0, false, false, 'mine');
+    const absent = createStationMarkerContent(station, 0, false, false, 'not-mine');
+
+    expect(mine).toHaveClass('is-mine');
+    expect(mine).toHaveTextContent('有我');
+    expect(mine).toHaveAttribute('aria-label', expect.stringContaining('有我'));
+    expect(absent).toHaveClass('not-mine');
+    expect(absent).toHaveTextContent('不参加');
+    expect(absent).toHaveAttribute('aria-label', expect.stringContaining('不参加'));
+  });
 });
 
 describe('editor participants', () => {

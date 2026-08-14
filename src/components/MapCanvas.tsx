@@ -14,6 +14,7 @@ interface MapCanvasProps {
   selectedStationId?: EntityId;
   selectedRouteId?: EntityId;
   currentStationId?: EntityId;
+  participantId?: EntityId;
   arrivedStationIds?: EntityId[];
   interactivePick?: boolean;
   onSelectStation?: (id: EntityId) => void;
@@ -38,6 +39,7 @@ export function MapCanvas(props: MapCanvasProps) {
     selectedStationId,
     selectedRouteId,
     currentStationId,
+    participantId,
     arrivedStationIds,
     interactivePick,
     onSelectStation,
@@ -157,11 +159,19 @@ export function MapCanvas(props: MapCanvasProps) {
         const overlays: AMapOverlay[] = [];
         event.routes.forEach((route) => {
           if (route.status === 'stale') return;
+          const routeHasParticipant =
+            !participantId ||
+            event.stations
+              .filter(
+                (station) => station.id === route.fromStationId || station.id === route.toStationId,
+              )
+              .some((station) => station.participantIds.includes(participantId));
           const polyline = new sdk.Polyline({
             path: route.geometry.map((point) => [point.lng, point.lat]),
             strokeColor: routeColors[route.mode],
             strokeWeight: route.id === selectedRouteId ? 8 : 5,
-            strokeOpacity: route.status === 'ready' ? 0.78 : 0.58,
+            strokeOpacity:
+              (route.status === 'ready' ? 0.78 : 0.58) * (routeHasParticipant ? 1 : 0.28),
             strokeStyle: route.status === 'ready' ? 'solid' : 'dashed',
             lineJoin: 'round',
             lineCap: 'round',
@@ -173,11 +183,17 @@ export function MapCanvas(props: MapCanvasProps) {
         event.stations.forEach((station) => {
           const index = stationIndex.get(station.id) ?? -1;
           const isPast = arrivedStationIds?.includes(station.id);
+          const identity = participantId
+            ? station.participantIds.includes(participantId)
+              ? 'mine'
+              : 'not-mine'
+            : undefined;
           const content = createStationMarkerContent(
             station,
             index,
             station.id === currentStationId,
             isPast,
+            identity,
           );
           const marker = new sdk.Marker({
             position: [station.coordinate.lng, station.coordinate.lat],
@@ -239,6 +255,7 @@ export function MapCanvas(props: MapCanvasProps) {
     selectedRouteId,
     currentStationId,
     arrivedStationIds,
+    participantId,
     focusSignal,
     areaFocusSignal,
     mapReady,
@@ -317,6 +334,13 @@ function FallbackMap(props: MapCanvasProps & { message?: string }) {
           const from = points.get(route.fromStationId);
           const to = points.get(route.toStationId);
           if (!from || !to) return null;
+          const routeHasParticipant =
+            !props.participantId ||
+            props.event.stations
+              .filter(
+                (station) => station.id === route.fromStationId || station.id === route.toStationId,
+              )
+              .some((station) => station.participantIds.includes(props.participantId!));
           const middleX = (from.x + to.x) / 2 + 4;
           const middleY = (from.y + to.y) / 2 - 3;
           return (
@@ -324,7 +348,7 @@ function FallbackMap(props: MapCanvasProps & { message?: string }) {
               key={route.id}
               d={`M ${from.x} ${from.y} Q ${middleX} ${middleY} ${to.x} ${to.y}`}
               stroke={routeColors[route.mode]}
-              className={route.status === 'ready' ? '' : 'dashed'}
+              className={`${route.status === 'ready' ? '' : 'dashed'} ${routeHasParticipant ? '' : 'not-mine'}`.trim()}
               onClick={() => props.onSelectRoute?.(route.id)}
               tabIndex={props.onSelectRoute ? 0 : undefined}
               role={props.onSelectRoute ? 'button' : undefined}
@@ -343,22 +367,30 @@ function FallbackMap(props: MapCanvasProps & { message?: string }) {
         const point = points.get(station.id);
         if (!point) return null;
         const past = props.arrivedStationIds?.includes(station.id);
+        const identity = props.participantId
+          ? station.participantIds.includes(props.participantId)
+            ? 'mine'
+            : 'not-mine'
+          : undefined;
         return (
           <button
             key={station.id}
             type="button"
-            className={`table-marker ${station.id === props.currentStationId ? 'is-current' : ''} ${past ? 'is-past' : ''} ${station.id === props.selectedStationId ? 'is-selected' : ''}`}
+            className={`table-marker ${station.id === props.currentStationId ? 'is-current' : ''} ${past ? 'is-past' : ''} ${station.id === props.selectedStationId ? 'is-selected' : ''} ${identity === 'mine' ? 'is-mine' : identity === 'not-mine' ? 'not-mine' : ''}`}
             style={{ left: `${point.x}%`, top: `${point.y}%` }}
             onClick={() => props.onSelectStation?.(station.id)}
             aria-label={
               stationIndex.has(station.id)
-                ? `第${(stationIndex.get(station.id) ?? 0) + 1}站 ${station.shortName}`
-                : `待安排站点 ${station.shortName}`
+                ? `第${(stationIndex.get(station.id) ?? 0) + 1}站 ${station.shortName}${identity ? `，${identity === 'mine' ? '有我' : '不参加'}` : ''}`
+                : `待安排站点 ${station.shortName}${identity ? `，${identity === 'mine' ? '有我' : '不参加'}` : ''}`
             }
           >
             <b>{stationIndex.has(station.id) ? (stationIndex.get(station.id) ?? 0) + 1 : '待'}</b>
             <span>{formatStationTimeRange(station)}</span>
             <strong>{station.shortName}</strong>
+            {identity && (
+              <em className="identity-badge">{identity === 'mine' ? '有我' : '不参加'}</em>
+            )}
           </button>
         );
       })}

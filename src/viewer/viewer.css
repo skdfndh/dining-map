@@ -197,6 +197,16 @@ button {
   white-space: nowrap;
   font-size: 22px;
 }
+.viewer-title small {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--sage);
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .viewer-title button,
 .bottom-sheet header button,
 .expense-sheet-full header button {
@@ -255,6 +265,13 @@ button {
   color: var(--soy);
   background: rgba(255, 250, 241, 0.92);
   box-shadow: var(--shadow-soft);
+}
+.viewer-tools button.identity-active {
+  color: #38583d;
+  background: rgba(223, 235, 216, 0.96);
+  box-shadow:
+    0 0 0 2px rgba(120, 146, 103, 0.3),
+    var(--shadow-soft);
 }
 .viewer-tools svg {
   width: 17px;
@@ -446,6 +463,94 @@ button {
   color: var(--soy-soft);
   background: rgba(232, 213, 182, 0.58);
   font-size: 10px;
+}
+.people-chips span.is-me {
+  color: #38583d;
+  background: rgba(120, 146, 103, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(120, 146, 103, 0.3);
+}
+.station-identity-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -4px 0 14px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.station-identity-status svg {
+  width: 15px;
+}
+.station-identity-status.attends {
+  color: #38583d;
+  background: rgba(120, 146, 103, 0.15);
+}
+.station-identity-status.absent {
+  color: var(--soy-soft);
+  background: rgba(116, 98, 88, 0.08);
+}
+.identity-sheet {
+  max-height: min(76vh, 640px);
+}
+.identity-intro {
+  margin: 10px 0 13px;
+  color: var(--soy-soft);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.identity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.identity-grid > button {
+  position: relative;
+  min-width: 0;
+  min-height: 54px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 9px 32px 9px 11px;
+  border: 1px solid rgba(103, 67, 44, 0.11);
+  border-radius: 11px 17px 12px 14px;
+  color: var(--soy);
+  background: rgba(233, 215, 186, 0.42);
+  text-align: left;
+}
+.identity-grid > button.selected {
+  border-color: rgba(120, 146, 103, 0.48);
+  color: #38583d;
+  background: rgba(223, 235, 216, 0.88);
+}
+.identity-grid strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.identity-grid small {
+  color: var(--soy-soft);
+  font-size: 9px;
+}
+.identity-grid svg {
+  position: absolute;
+  top: 15px;
+  right: 10px;
+  width: 18px;
+}
+.clear-identity {
+  width: 100%;
+  min-height: 40px;
+  margin-top: 9px;
+  border-radius: 11px;
+  color: var(--soy-soft);
+  background: rgba(116, 98, 88, 0.08);
+}
+.identity-local-note {
+  margin: 10px 0 0;
+  color: var(--soy-soft);
+  font-size: 9px;
+  text-align: center;
 }
 .nav-actions {
   display: grid;

@@ -135,6 +135,7 @@ function UnlockedViewerApp({ event }: { event: DiningEvent }) {
   const [selectedStationId, setSelectedStationId] = useState<EntityId>();
   const [selectedRouteId, setSelectedRouteId] = useState<EntityId>();
   const [showExpenses, setShowExpenses] = useState(false);
+  const [showIdentity, setShowIdentity] = useState(false);
   const [focusSignal, setFocusSignal] = useState('overview');
   useEffect(() => {
     setState(sanitizeViewerState(event, loadViewerState(event.id)));
@@ -144,20 +145,24 @@ function UnlockedViewerApp({ event }: { event: DiningEvent }) {
     if (stateLoadedForEvent === event.id) saveViewerState(event.id, state);
   }, [event.id, state, stateLoadedForEvent]);
   useEffect(() => {
-    if (!showExpenses && !selectedStationId && !selectedRouteId) return;
+    if (!showIdentity && !showExpenses && !selectedStationId && !selectedRouteId) return;
     const closeOverlay = (keyboardEvent: KeyboardEvent) => {
       if (keyboardEvent.key !== 'Escape') return;
-      if (showExpenses) setShowExpenses(false);
+      if (showIdentity) setShowIdentity(false);
+      else if (showExpenses) setShowExpenses(false);
       else if (selectedStationId) setSelectedStationId(undefined);
       else setSelectedRouteId(undefined);
     };
     window.addEventListener('keydown', closeOverlay);
     return () => window.removeEventListener('keydown', closeOverlay);
-  }, [selectedRouteId, selectedStationId, showExpenses]);
+  }, [selectedRouteId, selectedStationId, showExpenses, showIdentity]);
   const currentStationId = inferCurrentStation(event, state);
   const focusId = state.mode === 'step' ? (state.focusedStationId ?? currentStationId) : undefined;
   const selectedStation = event.stations.find((station) => station.id === selectedStationId);
   const selectedRoute = event.routes.find((route) => route.id === selectedRouteId);
+  const selectedParticipant = event.participants.find(
+    (participant) => participant.id === state.participantId,
+  );
   const currentIndex = Math.max(
     0,
     event.itinerary.indexOf(focusId ?? currentStationId ?? event.itinerary[0]),
@@ -212,6 +217,7 @@ function UnlockedViewerApp({ event }: { event: DiningEvent }) {
         selectedStationId={selectedStationId ?? focusId}
         selectedRouteId={selectedRouteId}
         currentStationId={currentStationId}
+        participantId={state.participantId}
         arrivedStationIds={state.arrivedStationIds}
         onSelectStation={selectStation}
         onSelectRoute={selectRoute}
@@ -230,6 +236,7 @@ function UnlockedViewerApp({ event }: { event: DiningEvent }) {
             · {event.city || '城市待定'}
           </p>
           <h1 className="display-type">{event.title}</h1>
+          {selectedParticipant && <small>正在以 {selectedParticipant.name} 的身份查看</small>}
         </div>
         <button aria-label="查看完整路线" onClick={showOverview}>
           <MapIcon />
@@ -251,6 +258,14 @@ function UnlockedViewerApp({ event }: { event: DiningEvent }) {
         >
           <Compass />
           <span>当前站</span>
+        </button>
+        <button
+          className={selectedParticipant ? 'identity-active' : ''}
+          aria-label={selectedParticipant ? `我是谁，当前是${selectedParticipant.name}` : '我是谁'}
+          onClick={() => setShowIdentity(true)}
+        >
+          <Users />
+          <span>{selectedParticipant?.name ?? '我是谁'}</span>
         </button>
         <button onClick={() => setShowExpenses(true)}>
           <Wallet />
@@ -307,6 +322,7 @@ function UnlockedViewerApp({ event }: { event: DiningEvent }) {
         <StationSheet
           event={event}
           station={selectedStation}
+          viewerParticipantId={state.participantId}
           onClose={() => setSelectedStationId(undefined)}
           onFocus={() => {
             const index = event.itinerary.indexOf(selectedStation.id);
@@ -316,6 +332,17 @@ function UnlockedViewerApp({ event }: { event: DiningEvent }) {
       )}
       {selectedRoute && (
         <RouteSheet route={selectedRoute} onClose={() => setSelectedRouteId(undefined)} />
+      )}
+      {showIdentity && (
+        <IdentitySheet
+          event={event}
+          selectedParticipantId={state.participantId}
+          onSelect={(participantId) => {
+            patchState({ participantId });
+            setShowIdentity(false);
+          }}
+          onClose={() => setShowIdentity(false)}
+        />
       )}
       {showExpenses && (
         <ExpenseSheet
@@ -332,16 +359,22 @@ function UnlockedViewerApp({ event }: { event: DiningEvent }) {
 function StationSheet({
   event,
   station,
+  viewerParticipantId,
   onClose,
   onFocus,
 }: {
   event: DiningEvent;
   station: Station;
+  viewerParticipantId?: EntityId;
   onClose: () => void;
   onFocus: () => void;
 }) {
   const participants = event.participants.filter((person) =>
     station.participantIds.includes(person.id),
+  );
+  const viewerParticipant = event.participants.find((person) => person.id === viewerParticipantId);
+  const viewerAttends = Boolean(
+    viewerParticipantId && station.participantIds.includes(viewerParticipantId),
   );
   const [copyNotice, setCopyNotice] = useState('');
   async function copyAddress() {
@@ -398,9 +431,20 @@ function StationSheet({
       <div className="people-chips">
         <Users />
         {participants.map((person) => (
-          <span key={person.id}>{person.name}</span>
+          <span className={person.id === viewerParticipantId ? 'is-me' : ''} key={person.id}>
+            {person.name}
+            {person.id === viewerParticipantId ? ' · 我' : ''}
+          </span>
         ))}
       </div>
+      {viewerParticipant && (
+        <div className={`station-identity-status ${viewerAttends ? 'attends' : 'absent'}`}>
+          {viewerAttends ? <Check /> : <X />}
+          {viewerAttends
+            ? `${viewerParticipant.name}参加这一站`
+            : `${viewerParticipant.name}不参加这一站`}
+        </div>
+      )}
       <div className="nav-actions">
         <a href={amapNavigationUrl(station)} target="_blank" rel="noreferrer">
           高德导航
@@ -414,6 +458,67 @@ function StationSheet({
         进入逐站浏览
       </button>
       <p className="wechat-note">若微信内无法唤起导航，请使用右上角菜单在系统浏览器中打开。</p>
+    </section>
+  );
+}
+
+function IdentitySheet({
+  event,
+  selectedParticipantId,
+  onSelect,
+  onClose,
+}: {
+  event: DiningEvent;
+  selectedParticipantId?: EntityId;
+  onSelect: (participantId: EntityId | undefined) => void;
+  onClose: () => void;
+}) {
+  return (
+    <section
+      className="bottom-sheet identity-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="identity-sheet-title"
+    >
+      <div className="sheet-handle" />
+      <header>
+        <div>
+          <p className="eyebrow">PERSONAL ROUTE</p>
+          <h2 className="display-type" id="identity-sheet-title">
+            我是谁
+          </h2>
+        </div>
+        <button aria-label="关闭身份选择" autoFocus onClick={onClose}>
+          <X />
+        </button>
+      </header>
+      <p className="identity-intro">选择姓名后，地图会突出显示你参加的地点，并同步个人费用。</p>
+      <div className="identity-grid">
+        {event.participants.map((participant) => {
+          const stationCount = event.stations.filter((station) =>
+            station.participantIds.includes(participant.id),
+          ).length;
+          const selected = participant.id === selectedParticipantId;
+          return (
+            <button
+              className={selected ? 'selected' : ''}
+              aria-pressed={selected}
+              key={participant.id}
+              onClick={() => onSelect(participant.id)}
+            >
+              <strong>{participant.name}</strong>
+              <small>{stationCount} 个地点有你</small>
+              {selected && <Check />}
+            </button>
+          );
+        })}
+      </div>
+      {selectedParticipantId && (
+        <button className="clear-identity" onClick={() => onSelect(undefined)}>
+          不以任何人身份查看
+        </button>
+      )}
+      <p className="identity-local-note">身份仅保存在当前浏览器，不会上传给组织者。</p>
     </section>
   );
 }
