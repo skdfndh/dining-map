@@ -1,5 +1,12 @@
 import { loadAmap } from './amap-loader';
-import type { MapPickTarget, MapService, PlaceCandidate, RouteRequest, RouteResult } from './types';
+import type {
+  AdministrativeAreaLevel,
+  MapPickTarget,
+  MapService,
+  PlaceCandidate,
+  RouteRequest,
+  RouteResult,
+} from './types';
 
 function plugin(sdk: Awaited<ReturnType<typeof loadAmap>>, name: string): Promise<void> {
   return new Promise((resolve) => sdk.plugin(name, resolve));
@@ -10,6 +17,30 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function locationCoordinate(value: unknown): { lng: number; lat: number } | undefined {
+  const location = asRecord(value);
+  const point = value as { getLng?: () => number; getLat?: () => number } | undefined;
+  const lng = Number(location.lng ?? point?.getLng?.());
+  const lat = Number(location.lat ?? point?.getLat?.());
+  return Number.isFinite(lng) && Number.isFinite(lat) ? { lng, lat } : undefined;
+}
+
+function deadline<T>(promise: Promise<T>, milliseconds: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error('行政区查询超时')), milliseconds);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 export function mapReverseGeocodeResult(
@@ -115,24 +146,47 @@ export class AmapService implements MapService {
     );
   }
 
-  async resolveAreaCenter(keyword: string): Promise<{ lng: number; lat: number }> {
+  async resolveAreaCenter(
+    keyword: string,
+    level: AdministrativeAreaLevel = 'district',
+    fallbackAddress: string = keyword,
+  ): Promise<{ lng: number; lat: number }> {
     const sdk = await loadAmap();
     await plugin(sdk, 'AMap.DistrictSearch');
-    const search = new sdk.DistrictSearch({ level: 'district', subdistrict: 0 });
-    return new Promise((resolve, reject) =>
+    const search = new sdk.DistrictSearch({ level, subdistrict: 0, extensions: 'base' });
+    const districtRequest = new Promise<{ lng: number; lat: number }>((resolve, reject) =>
       search.search(keyword, (status, raw) => {
         const district = asRecord(asArray(asRecord(raw).districtList)[0]);
-        const center = district.center as
-          { lng?: number; lat?: number; getLng?: () => number; getLat?: () => number } | undefined;
-        const lng = Number(center?.lng ?? center?.getLng?.());
-        const lat = Number(center?.lat ?? center?.getLat?.());
-        if (status !== 'complete' || !Number.isFinite(lng) || !Number.isFinite(lat)) {
+        const center = locationCoordinate(district.center);
+        if (status !== 'complete' || !center) {
           reject(new Error('暂时无法定位该行政区'));
           return;
         }
-        resolve({ lng, lat });
+        resolve(center);
       }),
     );
+    try {
+      return await deadline(districtRequest, 2500);
+    } catch {
+      await plugin(sdk, 'AMap.Geocoder');
+      const geocoder = new sdk.Geocoder({ city: '全国' });
+      const geocodeRequest = new Promise<{ lng: number; lat: number }>((resolve, reject) =>
+        geocoder.getLocation(fallbackAddress, (status, raw) => {
+          const geocode = asRecord(asArray(asRecord(raw).geocodes)[0]);
+          const center = locationCoordinate(geocode.location);
+          if (status !== 'complete' || !center) {
+            reject(new Error('暂时无法定位该行政区，请检查网络后重试'));
+            return;
+          }
+          resolve(center);
+        }),
+      );
+      try {
+        return await deadline(geocodeRequest, 3500);
+      } catch {
+        throw new Error('暂时无法定位该行政区，请检查网络或高德域名配置后重试');
+      }
+    }
   }
 
   async searchPlaces(keyword: string, city?: string): Promise<PlaceCandidate[]> {

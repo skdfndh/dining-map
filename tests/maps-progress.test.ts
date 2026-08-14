@@ -11,8 +11,55 @@ import type { MapService } from '../src/maps/types';
 import { inferCurrentStation, sanitizeViewerState } from '../src/viewer/progress';
 import { mapReverseGeocodeResult, parseAmapRouteResult } from '../src/maps/amap-service';
 import { createHotspotTracker, resolveMapPickTarget } from '../src/maps/pick';
+import { areaSearchRequest, buildArea } from '../src/domain/areas';
+import { decideMapViewport } from '../src/maps/viewport';
 
 describe('maps and progress', () => {
+  it('uses administrative codes and the matching AMap level for area lookup', () => {
+    const city = buildArea('440000', '440100');
+    const district = buildArea('440000', '440100', '440106');
+    const municipality = buildArea('110000', '110100');
+
+    expect(city && areaSearchRequest(city)).toEqual({
+      keyword: '440100',
+      level: 'city',
+      fallbackAddress: '广东省广州市',
+    });
+    expect(district && areaSearchRequest(district)).toEqual({
+      keyword: '440106',
+      level: 'district',
+      fallbackAddress: '广东省广州市天河区',
+    });
+    expect(municipality && areaSearchRequest(municipality)).toEqual({
+      keyword: '110000',
+      level: 'province',
+      fallbackAddress: '北京市',
+    });
+  });
+
+  it('prioritizes an explicit area recenter even when stations already exist', () => {
+    expect(
+      decideMapViewport({
+        areaFocusRequested: true,
+        hasAreaCenter: true,
+        hasSelectedStation: true,
+        hasOverlays: true,
+        dataChanged: true,
+        focusRequested: false,
+      }),
+    ).toBe('area');
+    expect(
+      decideMapViewport({
+        areaFocusRequested: false,
+        hasAreaCenter: true,
+        hasSelectedStation: false,
+        hasOverlays: false,
+        dataChanged: true,
+        focusRequested: false,
+      }),
+    ).toBe('area');
+  });
+
   it('maps reverse geocoding to the nearest POI and falls back to an address', () => {
     const coordinate = { lng: 121.47, lat: 31.23, system: 'GCJ02' as const };
     expect(

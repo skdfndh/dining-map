@@ -14,6 +14,7 @@ export interface AreaCenterResult {
   lng: number;
   lat: number;
 }
+export type AdministrativeAreaLevel = 'province' | 'city' | 'district';
 export interface RouteRequest {
   origin: Coordinate;
   destination: Coordinate;
@@ -31,5 +32,9 @@ export interface MapService {
   enrichHotspot(hotspot: NonNullable<MapPickTarget['hotspot']>): Promise<PlaceCandidate>;
   reverseGeocode(coordinate: Coordinate): Promise<PlaceCandidate>;
   calculateRoute(request: RouteRequest): Promise<RouteResult>;
-  resolveAreaCenter(keyword: string): Promise<AreaCenterResult>;
+  resolveAreaCenter(
+    keyword: string,
+    level?: AdministrativeAreaLevel,
+    fallbackAddress?: string,
+  ): Promise<AreaCenterResult>;
 }

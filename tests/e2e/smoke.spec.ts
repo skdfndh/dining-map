@@ -42,6 +42,11 @@ test('editor highlights expenses and starts a blank activity', async ({ page }) 
   await page.getByLabel('区县（可选）').selectOption({ label: '天河区' });
   await expect(page.getByText(/广东省 · 广州市 · 天河区/)).toBeVisible();
   await expect(page.getByText(/地图将以/)).toBeVisible();
+  await expect(page.locator('.helper-message')).toHaveText(
+    /地图已大概定位到天河区|暂时无法定位该行政区/,
+    { timeout: 15000 },
+  );
+  await expect(page.locator('.map-sdk .amap-maps')).toBeVisible();
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '恢复上个活动' }).click();
   await expect(page.getByLabel('活动名称')).toHaveValue('待恢复的周末聚餐');

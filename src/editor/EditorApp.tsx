@@ -37,7 +37,7 @@ import type {
 import { FUZZY_PERIODS } from '../domain/types';
 import { createId } from '../domain/id';
 import { removeParticipant } from '../domain/event-mutations';
-import { areaSearchName, buildArea, citiesFor, districtsFor, provinces } from '../domain/areas';
+import { areaSearchRequest, buildArea, citiesFor, districtsFor, provinces } from '../domain/areas';
 import { createBlankEvent, createSampleEvent } from '../domain/sample';
 import {
   autoSortStations,
@@ -202,6 +202,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<PlaceCandidate[]>([]);
   const [searchMessage, setSearchMessage] = useState('');
+  const [areaFocusSignal, setAreaFocusSignal] = useState<string>();
   const [participantHistory, setParticipantHistory] = useState(loadParticipantHistory);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyInitial, setHistoryInitial] = useState('ALL');
@@ -921,6 +922,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
             onSelectStation={selectStation}
             onSelectRoute={selectRoute}
             onPickCoordinate={pickMapCoordinate}
+            areaFocusSignal={areaFocusSignal}
           />
           <div className="map-editor-badge">
             <Route size={16} />
@@ -966,13 +968,19 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
                 const requestId = ++areaRequestRef.current;
                 setSearchMessage('正在定位所选地区…');
                 try {
-                  const center = await mapService.resolveAreaCenter(areaSearchName(nextArea));
+                  const areaSearch = areaSearchRequest(nextArea);
+                  const center = await mapService.resolveAreaCenter(
+                    areaSearch.keyword,
+                    areaSearch.level,
+                    areaSearch.fallbackAddress,
+                  );
                   if (requestId !== areaRequestRef.current) return;
                   setEvent((current) => ({
                     ...current,
                     city: nextArea.city,
                     area: { ...nextArea, center: { ...center, system: 'GCJ02' } },
                   }));
+                  setAreaFocusSignal(`area-${requestId}`);
                   setSearchMessage(`地图已大概定位到${nextArea.district || nextArea.city}`);
                 } catch (error) {
                   if (requestId !== areaRequestRef.current) return;

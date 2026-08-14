@@ -5,6 +5,7 @@ import { formatStationTimeRange } from '../domain/time';
 import { hasAmapConfig, loadAmap, type AMapMap, type AMapOverlay } from '../maps/amap-loader';
 import type { MapPickTarget } from '../maps/types';
 import { createHotspotTracker } from '../maps/pick';
+import { decideMapViewport } from '../maps/viewport';
 import { createStationMarkerContent } from './station-marker';
 import './map-canvas.css';
 
@@ -19,6 +20,7 @@ interface MapCanvasProps {
   onSelectRoute?: (id: EntityId) => void;
   onPickCoordinate?: (target: MapPickTarget) => void;
   focusSignal?: string;
+  areaFocusSignal?: string;
 }
 
 const routeColors: Record<RouteSegment['mode'], string> = {
@@ -42,14 +44,16 @@ export function MapCanvas(props: MapCanvasProps) {
     onSelectRoute,
     onPickCoordinate,
     focusSignal,
+    areaFocusSignal,
   } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<AMapMap | undefined>(undefined);
   const hotspotTrackerRef = useRef(createHotspotTracker());
   const overlaysRef = useRef<AMapOverlay[]>([]);
-  const manuallyExploredRef = useRef(false);
+  const viewportModeRef = useRef<'fit' | 'area' | 'station' | 'manual'>('fit');
   const fittedDataKeyRef = useRef('');
   const previousFocusSignalRef = useRef<string | undefined>(undefined);
+  const previousAreaFocusSignalRef = useRef(areaFocusSignal);
   const [mapError, setMapError] = useState<string>();
   const [mapReady, setMapReady] = useState(false);
   const canUseAmap = hasAmapConfig();
@@ -85,7 +89,7 @@ export function MapCanvas(props: MapCanvasProps) {
         });
         const mapContainer = containerRef.current;
         const markAsExplored = () => {
-          manuallyExploredRef.current = true;
+          viewportModeRef.current = 'manual';
         };
         mapContainer.addEventListener('pointerdown', markAsExplored);
         mapContainer.addEventListener('wheel', markAsExplored, { passive: true });
@@ -136,7 +140,8 @@ export function MapCanvas(props: MapCanvasProps) {
       overlaysRef.current = [];
       fittedDataKeyRef.current = '';
       previousFocusSignalRef.current = undefined;
-      manuallyExploredRef.current = false;
+      previousAreaFocusSignalRef.current = undefined;
+      viewportModeRef.current = 'fit';
     };
   }, [canUseAmap, interactivePick]);
 
@@ -188,21 +193,33 @@ export function MapCanvas(props: MapCanvasProps) {
         overlaysRef.current = overlays;
         const dataChanged = fittedDataKeyRef.current !== viewportDataKey;
         const focusRequested = previousFocusSignalRef.current !== focusSignal;
-        if (selectedStationId) {
-          const station = event.stations.find((item) => item.id === selectedStationId);
-          if (station) {
-            manuallyExploredRef.current = false;
-            map.setZoomAndCenter(15, [station.coordinate.lng, station.coordinate.lat]);
-          }
-        } else if (overlays.length && (dataChanged || focusRequested)) {
-          manuallyExploredRef.current = false;
-          map.setFitView(overlays, false, [80, 80, 120, 80]);
-        } else if (!overlays.length && event.area?.center && (dataChanged || focusRequested)) {
-          manuallyExploredRef.current = false;
+        const areaFocusRequested =
+          areaFocusSignal !== undefined && previousAreaFocusSignalRef.current !== areaFocusSignal;
+        const selectedStation = event.stations.find((item) => item.id === selectedStationId);
+        const viewportAction = decideMapViewport({
+          areaFocusRequested,
+          hasAreaCenter: Boolean(event.area?.center),
+          hasSelectedStation: Boolean(selectedStation),
+          hasOverlays: overlays.length > 0,
+          dataChanged,
+          focusRequested,
+        });
+        if (viewportAction === 'area' && event.area?.center) {
+          viewportModeRef.current = 'area';
           map.setZoomAndCenter(11, [event.area.center.lng, event.area.center.lat]);
+        } else if (viewportAction === 'station' && selectedStation) {
+          viewportModeRef.current = 'station';
+          map.setZoomAndCenter(15, [
+            selectedStation.coordinate.lng,
+            selectedStation.coordinate.lat,
+          ]);
+        } else if (viewportAction === 'fit') {
+          viewportModeRef.current = 'fit';
+          map.setFitView(overlays, false, [80, 80, 120, 80]);
         }
         fittedDataKeyRef.current = viewportDataKey;
         previousFocusSignalRef.current = focusSignal;
+        previousAreaFocusSignalRef.current = areaFocusSignal;
       })
       .catch((error: Error) => {
         if (!cancelled) setMapError(error.message);
@@ -217,6 +234,7 @@ export function MapCanvas(props: MapCanvasProps) {
     currentStationId,
     arrivedStationIds,
     focusSignal,
+    areaFocusSignal,
     mapReady,
     viewportDataKey,
   ]);
@@ -230,7 +248,7 @@ export function MapCanvas(props: MapCanvasProps) {
         const map = mapRef.current;
         if (!map) return;
         map.resize();
-        if (!manuallyExploredRef.current && overlaysRef.current.length) {
+        if (viewportModeRef.current === 'fit' && overlaysRef.current.length) {
           map.setFitView(overlaysRef.current, false, [80, 80, 120, 80]);
         }
       });

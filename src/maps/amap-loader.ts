@@ -51,6 +51,7 @@ interface AMapDistrictSearch {
   search(keyword: string, callback: (status: string, result: unknown) => void): void;
 }
 interface AMapGeocoder {
+  getLocation(address: string, callback: (status: string, result: unknown) => void): void;
   getAddress(
     coordinate: [number, number],
     callback: (status: string, result: unknown) => void,

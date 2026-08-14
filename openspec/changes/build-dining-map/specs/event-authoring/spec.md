@@ -22,6 +22,10 @@ The editor SHALL allow the organizer to define an activity name, optional date, 
 - **WHEN** the organizer selects a province and city and optionally a district or county
 - **THEN** the editor saves the linked administrative names and recenters an empty map to the selected area's approximate center
 
+#### Scenario: Change the area of an activity with stations
+- **WHEN** the organizer selects a different province, city, or district while the activity already contains stations
+- **THEN** the editor resolves the matching administrative level and explicitly recenters the map to the newly selected area's approximate center instead of immediately fitting the old stations
+
 #### Scenario: Delete a referenced participant
 - **WHEN** the organizer confirms deletion of a participant who appears in stations, expense allocations, or advances
 - **THEN** the editor removes every reference to that stable ID so no orphaned settlement or attendance data remains

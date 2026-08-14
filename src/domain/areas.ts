@@ -54,3 +54,29 @@ export function buildArea(
 export function areaSearchName(area: AdministrativeArea): string {
   return `${area.province}${area.city === area.province ? '' : area.city}${area.district ?? ''}`;
 }
+
+export function areaSearchRequest(area: AdministrativeArea): {
+  keyword: string;
+  level: 'province' | 'city' | 'district';
+  fallbackAddress: string;
+} {
+  if (area.district) {
+    return {
+      keyword: area.districtCode ?? areaSearchName(area),
+      level: 'district',
+      fallbackAddress: areaSearchName(area),
+    };
+  }
+  if (area.city === area.province) {
+    return {
+      keyword: area.provinceCode ?? area.province,
+      level: 'province',
+      fallbackAddress: area.province,
+    };
+  }
+  return {
+    keyword: area.cityCode ?? areaSearchName(area),
+    level: 'city',
+    fallbackAddress: areaSearchName(area),
+  };
+}
