@@ -34,6 +34,7 @@ import type {
   Station,
   StationTime,
   TransportMode,
+  ValidationIssue,
 } from '../domain/types';
 import { FUZZY_PERIODS } from '../domain/types';
 import { createId } from '../domain/id';
@@ -100,6 +101,7 @@ import { formatYuan, parseYuan } from '../settlement/money';
 
 const mapService = new AmapService();
 const autosave = createDraftAutosaver(650);
+type IssueFocusRequest = Pick<ValidationIssue, 'code' | 'entityId'> & { requestId: number };
 const modeNames: Record<TransportMode, string> = {
   walking: '步行',
   cycling: '骑行',
@@ -204,6 +206,8 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<PlaceCandidate[]>([]);
   const [searchMessage, setSearchMessage] = useState('');
+  const [publishBlocked, setPublishBlocked] = useState(false);
+  const [issueFocusRequest, setIssueFocusRequest] = useState<IssueFocusRequest>();
   const [areaFocusSignal, setAreaFocusSignal] = useState<string>();
   const [participantEditorOpen, setParticipantEditorOpen] = useState(false);
   const [participantHistory, setParticipantHistory] = useState(loadParticipantHistory);
@@ -214,6 +218,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   const participantEditButtonRef = useRef<HTMLButtonElement>(null);
   const draftLoadedRef = useRef(false);
   const areaRequestRef = useRef(0);
+  const issueRequestRef = useRef(0);
   const newParticipantIdsRef = useRef(new Set<EntityId>());
   const eventRef = useRef(event);
   eventRef.current = event;
@@ -305,6 +310,13 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
     };
   }, [staleRouteSignature]);
   const issues = useMemo(() => validateEvent(event), [event]);
+  const blockingIssues = useMemo(
+    () => issues.filter((issue) => issue.severity === 'error'),
+    [issues],
+  );
+  useEffect(() => {
+    if (publishBlocked && blockingIssues.length === 0) setPublishBlocked(false);
+  }, [blockingIssues.length, publishBlocked]);
   const bulkSchedule = useMemo(() => fillSortableUnscheduledStations(event), [event]);
   const selectedStation = event.stations.find((station) => station.id === selectedStationId);
   const selectedRoute = event.routes.find((route) => route.id === selectedRouteId);
@@ -328,6 +340,40 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
 
   function commit(next: DiningEvent) {
     setEvent({ ...next, routes: reconcileRoutes(next), updatedAt: new Date().toISOString() });
+  }
+  function locateIssue(issue: ValidationIssue) {
+    setIssueFocusRequest({
+      code: issue.code,
+      entityId: issue.entityId,
+      requestId: ++issueRequestRef.current,
+    });
+    setSearchMessage(`需要修改：${issue.message}`);
+
+    if (issue.code === 'TITLE_REQUIRED' || issue.code === 'AREA_REQUIRED') {
+      setSelectedStationId(undefined);
+      setSelectedRouteId(undefined);
+      setPanel('activity');
+      return;
+    }
+    if (issue.code === 'SETTLEMENT_INCOMPLETE') {
+      setSelectedStationId(undefined);
+      setSelectedRouteId(undefined);
+      setPanel('expense');
+      return;
+    }
+    if (issue.entityId && event.stations.some((station) => station.id === issue.entityId)) {
+      selectStation(issue.entityId);
+      return;
+    }
+    if (issue.entityId && event.routes.some((route) => route.id === issue.entityId)) {
+      selectRoute(issue.entityId);
+      return;
+    }
+    if (issue.entityId && event.participants.some((person) => person.id === issue.entityId)) {
+      setParticipantEditorOpen(true);
+      return;
+    }
+    setPanel('activity');
   }
   function selectStation(id: EntityId) {
     setSelectedStationId(id);
@@ -499,9 +545,10 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
     }
   }
   function exportJson() {
-    const errors = issues.filter((issue) => issue.severity === 'error');
-    if (errors.length) {
-      setSearchMessage(`还有 ${errors.length} 项阻断错误，请先处理`);
+    if (blockingIssues.length) {
+      setPublishBlocked(true);
+      setSearchMessage(`还有 ${blockingIssues.length} 项阻断错误，请先处理`);
+      locateIssue(blockingIssues[0]);
       return;
     }
     downloadText('event.json', exportEventJson(event), 'application/json;charset=utf-8');
@@ -679,16 +726,38 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
           </button>
         </div>
       </header>
+      {publishBlocked && blockingIssues.length > 0 && (
+        <section className="blocking-error-banner" role="alert" aria-live="assertive">
+          <span className="blocking-error-icon" aria-hidden="true">
+            <AlertTriangle />
+          </span>
+          <div>
+            <strong>还有 {blockingIssues.length} 项阻断错误</strong>
+            <p>{blockingIssues[0].message}</p>
+          </div>
+          <button type="button" onClick={() => locateIssue(blockingIssues[0])}>
+            定位并修改
+          </button>
+        </section>
+      )}
       <section className="editor-grid">
         <aside className="resource-panel">
           <nav className="resource-tabs">
             <button
-              className={panel === 'activity' ? 'active' : ''}
+              className={`${panel === 'activity' ? 'active' : ''} ${blockingIssues.length ? 'has-errors' : ''}`.trim()}
               aria-current={panel === 'activity' ? 'page' : undefined}
+              title={
+                blockingIssues.length ? `当前有 ${blockingIssues.length} 项阻断错误` : undefined
+              }
               onClick={() => setPanel('activity')}
             >
               <MapPin />
               活动
+              {blockingIssues.length > 0 && (
+                <b className="validation-count" aria-hidden="true">
+                  {blockingIssues.length}
+                </b>
+              )}
             </button>
             <button
               className={panel === 'expense' ? 'active' : ''}
@@ -828,7 +897,9 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
             <ActivityInspector
               event={event}
               issues={issues}
+              focusRequest={issueFocusRequest}
               onChange={setEvent}
+              onIssueSelect={locateIssue}
               onAutoSort={() => {
                 const sorted = autoSortStations(event.stations);
                 commit({
@@ -1377,7 +1448,9 @@ function DraftBoxModal({
 function ActivityInspector({
   event,
   issues,
+  focusRequest,
   onChange,
+  onIssueSelect,
   onAutoSort,
   onClear,
   onRestorePrevious,
@@ -1385,20 +1458,49 @@ function ActivityInspector({
 }: {
   event: DiningEvent;
   issues: ReturnType<typeof validateEvent>;
+  focusRequest?: IssueFocusRequest;
   onChange: (event: DiningEvent) => void;
+  onIssueSelect: (issue: ValidationIssue) => void;
   onAutoSort: () => void;
   onClear: () => void;
   onRestorePrevious: () => void;
   onResolveAreaCenter: (area: NonNullable<DiningEvent['area']>) => void;
 }) {
   const settlementComplete = calculateSettlement(event).complete;
+  const titleError = issues.find((issue) => issue.code === 'TITLE_REQUIRED');
+  const areaError = issues.find((issue) => issue.code === 'AREA_REQUIRED');
+  const blockingCount = issues.filter((issue) => issue.severity === 'error').length;
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    const targetId =
+      focusRequest.code === 'TITLE_REQUIRED'
+        ? 'activity-title'
+        : focusRequest.code === 'AREA_REQUIRED'
+          ? 'activity-province'
+          : 'publication-validation';
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(targetId);
+      target?.focus();
+      target?.scrollIntoView?.({ block: 'center' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusRequest]);
+
   return (
     <div className="inspector-content">
       <p className="eyebrow">ACTIVITY</p>
       <h2 className="display-type">活动与发布</h2>
-      <Field label="活动名称">
+      <Field
+        label="活动名称"
+        error={titleError ? '这是发布必填项，请填写本次聚餐安排的名称。' : undefined}
+        errorId="activity-title-error"
+      >
         <input
+          id="activity-title"
           value={event.title}
+          aria-invalid={Boolean(titleError)}
+          aria-describedby={titleError ? 'activity-title-error' : undefined}
           onChange={(e) => onChange({ ...event, title: e.target.value })}
         />
       </Field>
@@ -1411,7 +1513,12 @@ function ActivityInspector({
           />
         </Field>
       </div>
-      <AreaFields event={event} onChange={onChange} onResolveCenter={onResolveAreaCenter} />
+      <AreaFields
+        event={event}
+        invalid={Boolean(areaError)}
+        onChange={onChange}
+        onResolveCenter={onResolveAreaCenter}
+      />
       <Field label="一句简介">
         <textarea
           rows={3}
@@ -1439,8 +1546,15 @@ function ActivityInspector({
       <button className="secondary-button" onClick={onAutoSort}>
         按时间重新排序
       </button>
-      <div className="validation-box">
-        <h3>发布校验</h3>
+      <div
+        id="publication-validation"
+        className={`validation-box ${blockingCount ? 'has-errors' : ''}`}
+        tabIndex={-1}
+      >
+        <h3>
+          发布校验
+          {blockingCount > 0 && <span>{blockingCount} 项阻断</span>}
+        </h3>
         {issues.length === 0 ? (
           <p className="all-good">
             <Check />
@@ -1448,10 +1562,16 @@ function ActivityInspector({
           </p>
         ) : (
           issues.map((issue) => (
-            <p className={issue.severity} key={`${issue.code}-${issue.entityId}`}>
+            <button
+              type="button"
+              className={`validation-issue ${issue.severity}`}
+              key={`${issue.code}-${issue.entityId}`}
+              onClick={() => onIssueSelect(issue)}
+            >
               <AlertTriangle />
-              {issue.message}
-            </p>
+              <span>{issue.message}</span>
+              <em>定位修改</em>
+            </button>
           ))
         )}
       </div>
@@ -1469,10 +1589,12 @@ function ActivityInspector({
 
 function AreaFields({
   event,
+  invalid,
   onChange,
   onResolveCenter,
 }: {
   event: DiningEvent;
+  invalid: boolean;
   onChange: (event: DiningEvent) => void;
   onResolveCenter: (area: NonNullable<DiningEvent['area']>) => void;
 }) {
@@ -1499,11 +1621,17 @@ function AreaFields({
   }
 
   return (
-    <fieldset className="area-fields">
+    <fieldset className={`area-fields ${invalid ? 'field-invalid' : ''}`}>
       <legend>大概区域</legend>
       <div className="area-grid">
         <Field label="省份">
-          <select value={provinceCode} onChange={(e) => selectProvince(e.target.value)}>
+          <select
+            id="activity-province"
+            value={provinceCode}
+            aria-invalid={invalid}
+            aria-describedby={invalid ? 'activity-area-error' : undefined}
+            onChange={(e) => selectProvince(e.target.value)}
+          >
             <option value="">请选择省份</option>
             {provinces.map((province) => (
               <option value={province.value} key={province.value}>
@@ -1541,6 +1669,11 @@ function AreaFields({
           </select>
         </Field>
       </div>
+      {invalid && (
+        <p id="activity-area-error" className="area-error">
+          <AlertTriangle /> 请选择活动所在省份和城市。
+        </p>
+      )}
       {event.area ? (
         <p>
           <MapPin /> 地图将以 {event.area.province} · {event.area.city}
@@ -2098,11 +2231,27 @@ function ExpenseInspector({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  error,
+  errorId,
+}: {
+  label: string;
+  children: React.ReactNode;
+  error?: string;
+  errorId?: string;
+}) {
   return (
-    <label className="field">
+    <label className={`field ${error ? 'field-invalid' : ''}`}>
       <span>{label}</span>
       {children}
+      {error && (
+        <small className="field-error-message" id={errorId}>
+          <AlertTriangle />
+          {error}
+        </small>
+      )}
     </label>
   );
 }

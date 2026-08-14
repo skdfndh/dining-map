@@ -119,3 +119,28 @@ describe('editor participants', () => {
     await waitFor(() => expect(editButton).toHaveFocus());
   });
 });
+
+describe('editor publication validation', () => {
+  it('highlights and focuses the activity name when export is blocked', async () => {
+    grantEditorSession();
+    render(<EditorApp />);
+
+    await screen.findByText('草稿已保存');
+    const titleInput = screen.getByLabelText('活动名称');
+    fireEvent.change(titleInput, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '费用' }));
+    fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('还有 1 项阻断错误');
+    expect(screen.getByRole('alert')).toHaveTextContent('活动名称不能为空');
+    expect(screen.getByRole('button', { name: '活动' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: /活动名称不能为空.*定位修改/ })).toBeVisible();
+    const focusedTitleInput = screen.getByRole('textbox', { name: /^活动名称/ });
+    await waitFor(() => expect(focusedTitleInput).toHaveFocus());
+    expect(focusedTitleInput).toHaveAttribute('aria-invalid', 'true');
+
+    fireEvent.change(focusedTitleInput, { target: { value: '补充后的聚餐名称' } });
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(focusedTitleInput).toHaveAttribute('aria-invalid', 'false');
+  });
+});

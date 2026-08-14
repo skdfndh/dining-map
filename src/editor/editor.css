@@ -205,6 +205,56 @@ textarea:focus {
 .save-state.error {
   color: var(--tomato);
 }
+.blocking-error-banner {
+  position: fixed;
+  top: 82px;
+  right: 20px;
+  z-index: 90;
+  width: min(430px, calc(100vw - 40px));
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid rgba(143, 61, 50, 0.32);
+  border-radius: 15px 21px 16px 12px;
+  color: #6f2d25;
+  background: rgba(255, 244, 228, 0.98);
+  box-shadow: 0 15px 36px rgba(104, 40, 29, 0.24);
+}
+.blocking-error-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  color: white;
+  background: #a83f31;
+}
+.blocking-error-icon svg {
+  width: 19px;
+}
+.blocking-error-banner strong,
+.blocking-error-banner p {
+  display: block;
+  margin: 0;
+}
+.blocking-error-banner strong {
+  font-size: 12px;
+}
+.blocking-error-banner p {
+  margin-top: 3px;
+  font-size: 11px;
+}
+.blocking-error-banner button {
+  min-height: 36px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  color: white;
+  background: #8f3d32;
+  font-size: 10px;
+  font-weight: 800;
+}
 .editor-grid {
   min-height: 0;
   display: grid;
@@ -264,6 +314,23 @@ textarea:focus {
   background: rgba(217, 75, 50, 0.14);
   box-shadow: inset 0 -2px 0 var(--tomato);
   font-weight: 800;
+}
+.resource-tabs button.has-errors {
+  color: #7e3128;
+  box-shadow: inset 0 0 0 1px rgba(143, 61, 50, 0.28);
+  font-weight: 800;
+}
+.validation-count {
+  display: grid;
+  place-items: center;
+  min-width: 19px;
+  height: 19px;
+  padding-inline: 5px;
+  border-radius: 999px;
+  color: white;
+  background: #a83f31;
+  font-size: 9px;
+  line-height: 1;
 }
 .resource-tabs svg {
   width: 16px;
@@ -370,6 +437,15 @@ textarea:focus {
   width: 13px;
   flex: 0 0 auto;
   color: var(--tomato);
+}
+.area-fields.field-invalid {
+  border-color: rgba(168, 63, 49, 0.72);
+  background: rgba(217, 75, 50, 0.07);
+  box-shadow: 0 0 0 3px rgba(217, 75, 50, 0.08);
+}
+.area-fields p.area-error {
+  color: #8f3d32;
+  font-weight: 800;
 }
 .section-heading button {
   display: grid;
@@ -782,6 +858,28 @@ textarea:focus {
   color: var(--soy);
   font-weight: 500;
 }
+.field.field-invalid > span {
+  color: #8f3d32;
+}
+.field.field-invalid input,
+.field.field-invalid select,
+.field.field-invalid textarea {
+  border-color: rgba(168, 63, 49, 0.72);
+  background: rgba(255, 244, 228, 0.9);
+  box-shadow: 0 0 0 3px rgba(217, 75, 50, 0.08);
+}
+.field-error-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  color: #8f3d32;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.field-error-message svg {
+  flex: 0 0 auto;
+  width: 12px;
+}
 .field-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -832,9 +930,25 @@ textarea:focus {
   border-radius: 13px;
   background: rgba(232, 217, 193, 0.45);
 }
+.validation-box.has-errors {
+  border: 1px solid rgba(168, 63, 49, 0.42);
+  background: rgba(217, 75, 50, 0.07);
+  box-shadow: 0 8px 20px rgba(104, 40, 29, 0.08);
+}
 .validation-box h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0 0 8px;
   font-size: 12px;
+}
+.validation-box h3 span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: white;
+  background: #a83f31;
+  font-size: 8px;
 }
 .validation-box p {
   display: flex;
@@ -856,6 +970,36 @@ textarea:focus {
 }
 .validation-box .all-good {
   color: var(--sage);
+}
+.validation-issue {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 7px;
+  margin: 6px 0;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.validation-issue:hover,
+.validation-issue:focus-visible {
+  border-color: currentColor;
+  background: rgba(255, 255, 255, 0.86);
+}
+.validation-issue svg {
+  width: 13px;
+}
+.validation-issue em {
+  color: inherit;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
 }
 .danger-link {
   min-height: auto;
@@ -1479,6 +1623,17 @@ textarea:focus {
   }
 }
 @media (max-width: 760px) {
+  .blocking-error-banner {
+    top: 78px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+  .blocking-error-banner button {
+    grid-column: 2;
+    justify-self: start;
+  }
   .participant-focus-modal {
     max-height: 92vh;
     padding: 15px;

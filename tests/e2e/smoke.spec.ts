@@ -17,6 +17,30 @@ test('editor login gate opens the workspace', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /聚餐地图 · 行程编排台/ })).toBeVisible();
 });
 
+test('editor locates a blocking publication error and focuses its field', async ({ page }) => {
+  await page.goto('/editor.html', { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('编辑器密码').fill('dinner');
+  await page.getByRole('button', { name: '入席编辑' }).click();
+
+  const titleInput = page.getByLabel('活动名称');
+  await titleInput.fill('');
+  await page.getByRole('button', { name: '费用', exact: true }).click();
+  await page.getByRole('button', { name: 'JSON', exact: true }).click();
+
+  const blockingAlert = page.getByRole('alert');
+  await expect(blockingAlert).toContainText('还有 1 项阻断错误');
+  await expect(blockingAlert).toContainText('活动名称不能为空');
+  await expect(page.getByRole('button', { name: '活动', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(titleInput).toBeFocused();
+  await expect(titleInput).toHaveAttribute('aria-invalid', 'true');
+
+  await titleInput.fill('已修正的聚餐名称');
+  await expect(blockingAlert).toHaveCount(0);
+});
+
 test('editor highlights expenses and starts a blank activity', async ({ page }) => {
   await page.goto('/editor.html', { waitUntil: 'domcontentloaded' });
   await page.getByLabel('编辑器密码').fill('dinner');

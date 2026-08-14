@@ -118,7 +118,15 @@ The editor SHALL automatically save changes locally, display save status, restor
 - **THEN** the draft box omits that entry and remains able to list and restore other valid activities
 
 ### Requirement: Publication preview and validation
-The editor SHALL provide a mobile viewer preview and SHALL run validation before export. Validation SHALL distinguish blocking errors from non-blocking warnings and SHALL permit incomplete settlement data to be exported as a draft or organizing-in-progress event.
+The editor SHALL provide a mobile viewer preview and SHALL run validation before export. Validation SHALL distinguish blocking errors from non-blocking warnings and SHALL permit incomplete settlement data to be exported as a draft or organizing-in-progress event. A blocked export SHALL present a prominent actionable summary, indicate the affected editor workspace, and navigate to and focus the first directly editable invalid field. Individual validation issues SHALL also be selectable for locating their related activity, station, route, participant, or expense editor.
+
+#### Scenario: Locate a missing activity name
+- **WHEN** the organizer attempts JSON export while viewing another editor workspace and the activity name is empty
+- **THEN** the editor shows a prominent blocking summary, opens the activity workspace, visibly marks the name as invalid, and focuses the activity-name input for immediate correction
+
+#### Scenario: Select an issue from validation details
+- **WHEN** the organizer selects an issue in the publication validation list
+- **THEN** the editor opens the related workspace or entity and moves keyboard focus to a directly editable field when one is available
 
 #### Scenario: Export with pending time warning
 - **WHEN** the activity has a name and valid structure but includes a pending station time
