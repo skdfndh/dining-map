@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSampleEvent } from '../src/domain/sample';
-import { exportEventJson, exportSettlementCsv, importEventJson } from '../src/export/data';
+import {
+  exportEventJson,
+  exportSettlementCsv,
+  importEventJson,
+  MAX_EVENT_FILE_BYTES,
+  validateEventFileSize,
+} from '../src/export/data';
 import {
   clearDraft,
   loadDraft,
@@ -48,11 +54,27 @@ describe('storage and exchange', () => {
     expect(loadViewerState('two').participantId).toBeUndefined();
   });
 
+  it('sanitizes malformed viewer state instead of crashing the map', () => {
+    localStorage.setItem(
+      'dining-map:viewer:broken',
+      JSON.stringify({ arrivedStationIds: 'not-an-array', mode: 'unknown', participantId: 42 }),
+    );
+    expect(loadViewerState('broken')).toEqual({
+      participantId: undefined,
+      currentStationId: undefined,
+      arrivedStationIds: [],
+      mode: 'overview',
+      focusedStationId: undefined,
+    });
+  });
+
   it('validates password and session expiry', async () => {
     expect(await verifyPassword('dinner', EDITOR_PASSWORD_CONFIG)).toBe(true);
     grantEditorSession(1000);
     expect(hasEditorSession(1001)).toBe(true);
     clearEditorSession();
+    expect(hasEditorSession(1001)).toBe(false);
+    localStorage.setItem('dining-map:editor-session', 'Infinity');
     expect(hasEditorSession(1001)).toBe(false);
   });
 
@@ -61,5 +83,9 @@ describe('storage and exchange', () => {
     expect(importEventJson(exportEventJson(event)).title).toBe(event.title);
     expect(exportSettlementCsv(event)).toContain('小林');
     expect(exportSettlementCsv(event).charCodeAt(0)).toBe(0xfeff);
+  });
+
+  it('rejects oversized event files before parsing them', () => {
+    expect(() => validateEventFileSize({ size: MAX_EVENT_FILE_BYTES + 1 })).toThrow('超过 5 MB');
   });
 });

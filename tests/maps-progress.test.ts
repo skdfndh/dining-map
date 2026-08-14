@@ -8,7 +8,7 @@ import {
   routeIdentity,
 } from '../src/maps/routes';
 import type { MapService } from '../src/maps/types';
-import { inferCurrentStation } from '../src/viewer/progress';
+import { inferCurrentStation, sanitizeViewerState } from '../src/viewer/progress';
 import { mapReverseGeocodeResult, parseAmapRouteResult } from '../src/maps/amap-service';
 import { createHotspotTracker, resolveMapPickTarget } from '../src/maps/pick';
 
@@ -236,5 +236,56 @@ describe('maps and progress', () => {
         new Date('2026-08-20T14:45:00'),
       ),
     ).toBe('s_cafe');
+  });
+
+  it('uses local activity dates, chooses the latest started station, and supports midnight', () => {
+    const event = createSampleEvent();
+    event.date = '2026-08-20';
+
+    expect(
+      inferCurrentStation(
+        event,
+        { arrivedStationIds: [], mode: 'overview' },
+        new Date(2026, 7, 19, 23, 30),
+      ),
+    ).toBeUndefined();
+    expect(
+      inferCurrentStation(
+        event,
+        { arrivedStationIds: [], mode: 'overview' },
+        new Date(2026, 7, 20, 21, 0),
+      ),
+    ).toBe('s_ktv');
+
+    const ktv = event.stations.find((station) => station.id === 's_ktv');
+    if (!ktv) throw new Error('missing sample station');
+    ktv.start = { kind: 'exact', time: '23:00', dayOffset: 0 };
+    ktv.end = { time: '01:30', dayOffset: 1 };
+    expect(
+      inferCurrentStation(
+        event,
+        { arrivedStationIds: [], mode: 'overview' },
+        new Date(2026, 7, 21, 0, 30),
+      ),
+    ).toBe('s_ktv');
+  });
+
+  it('drops viewer progress references that no longer exist in an updated event', () => {
+    const event = createSampleEvent();
+    expect(
+      sanitizeViewerState(event, {
+        participantId: 'deleted-person',
+        currentStationId: 'deleted-station',
+        arrivedStationIds: ['s_hotpot', 'deleted-station', 's_hotpot'],
+        mode: 'step',
+        focusedStationId: 'deleted-station',
+      }),
+    ).toEqual({
+      participantId: undefined,
+      currentStationId: undefined,
+      arrivedStationIds: ['s_hotpot'],
+      mode: 'step',
+      focusedStationId: undefined,
+    });
   });
 });

@@ -37,11 +37,24 @@ export async function verifyPassword(password: string, config: PasswordConfig): 
 }
 
 export function grantEditorSession(now = Date.now()): void {
-  localStorage.setItem(SESSION_KEY, String(now + SESSION_MS));
+  try {
+    localStorage.setItem(SESSION_KEY, String(now + SESSION_MS));
+  } catch {
+    // The password gate remains usable, but the session cannot be remembered.
+  }
 }
 export function hasEditorSession(now = Date.now()): boolean {
-  return Number(localStorage.getItem(SESSION_KEY) ?? 0) > now;
+  try {
+    const expiry = Number(localStorage.getItem(SESSION_KEY) ?? 0);
+    return Number.isFinite(expiry) && expiry > now && expiry <= now + SESSION_MS;
+  } catch {
+    return false;
+  }
 }
 export function clearEditorSession(): void {
-  localStorage.removeItem(SESSION_KEY);
+  try {
+    localStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Nothing else is required when storage is unavailable.
+  }
 }

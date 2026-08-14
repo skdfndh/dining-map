@@ -15,11 +15,15 @@ Importing and re-exporting an activity SHALL preserve valid activity, participan
 - **THEN** existing IDs remain unchanged and only the new expense receives a new ID
 
 ### Requirement: Version validation and migration boundary
-The loader SHALL validate the file structure and schema version before mutating the editor. It SHALL migrate supported older versions or reject unsupported newer versions with a clear message while leaving the current draft intact.
+The loader SHALL enforce a bounded file size and SHALL validate the file structure, finite numeric ranges, clock values, and schema version before mutating the editor. It SHALL migrate supported older versions or reject unsupported newer versions with a clear message while leaving the current draft intact. Public strings SHALL be rendered as text rather than injected HTML.
 
 #### Scenario: Import unsupported future version
 - **WHEN** the organizer selects an event file whose schema version is newer than the application supports
 - **THEN** the editor refuses the import, explains the version mismatch, and retains the existing draft
+
+#### Scenario: Reject unsafe public data
+- **WHEN** an activity file exceeds the size limit, contains out-of-range values, or includes markup in a visible name
+- **THEN** the loader rejects invalid structure and the viewer displays accepted names literally without creating executable markup
 
 ### Requirement: JSON draft and publication export
 The editor SHALL allow structurally valid incomplete activities to be exported with their current settlement state and validation warnings. It SHALL NOT label an event as completed when completed-settlement invariants fail.
@@ -42,10 +46,13 @@ The viewer SHALL store identity, current station, arrival progress, and browsing
 - **WHEN** a participant opens two activities with different activity IDs
 - **THEN** each activity restores its own identity and progress without overwriting the other
 
+#### Scenario: Ignore damaged local state
+- **WHEN** saved viewer state is malformed or refers to participants and stations removed from the current activity
+- **THEN** the viewer discards invalid fields, preserves valid fields, and remains usable without changing the public activity
+
 ### Requirement: Reusable domain interfaces
 The implementation SHALL expose framework-independent TypeScript modules for event parsing, validation, time ordering, route-segment identity, settlement calculation, JSON export, and CSV export so future templates can reuse the behavior without importing UI components.
 
 #### Scenario: Calculate settlement outside editor UI
 - **WHEN** a caller supplies valid event-domain objects directly to the settlement module
 - **THEN** the module returns deterministic totals and transfers without requiring a DOM or map instance
-

@@ -20,6 +20,7 @@ export interface AMapMap {
   remove(items: AMapOverlay | AMapOverlay[]): void;
   clearMap(): void;
   destroy(): void;
+  resize(): void;
   setFitView(items?: AMapOverlay[], immediately?: boolean, avoid?: number[]): void;
   setZoomAndCenter(zoom: number, center: [number, number]): void;
   on(

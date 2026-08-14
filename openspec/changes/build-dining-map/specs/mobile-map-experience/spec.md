@@ -43,6 +43,10 @@ The viewer SHALL prioritize manual arrival progress, then infer from exact times
 - **WHEN** the activity is today, no manual progress exists, and the current time falls within a station's exact start and end times
 - **THEN** the viewer focuses that station as the inferred current station
 
+#### Scenario: Infer a station after midnight
+- **WHEN** an activity crosses midnight and the local calendar time falls within a next-day exact station
+- **THEN** the viewer uses the station day offset and chooses the latest eligible exact start rather than an earlier open-ended station
+
 ### Requirement: Visually distinguish progress accessibly
 Past stations and route portions SHALL appear dimmer and mixed with gray while remaining readable and interactive. Current and next stations SHALL use stronger warm accents, and state SHALL also be conveyed through labels or icons rather than color alone.
 
@@ -56,6 +60,17 @@ The viewer SHALL NOT force the viewport back to the current station after the pa
 #### Scenario: Pan away from current station
 - **WHEN** the participant drags the map after a station was focused
 - **THEN** the viewer leaves the manually selected viewport unchanged until another explicit focus action
+
+#### Scenario: Update progress after exploring
+- **WHEN** the participant changes arrival state or selects route details after manually exploring the map
+- **THEN** the viewer updates marker and route appearance without fitting all overlays or moving the viewport
+
+### Requirement: Accessible transient panels
+The viewer SHALL expose station, route, expense, and preview panels with identifiable headings, visible keyboard focus, and an explicit close action. Panels SHALL close with Escape, and status feedback SHALL be announced without relying on color alone.
+
+#### Scenario: Close details with a keyboard
+- **WHEN** a keyboard user opens a station detail panel and presses Escape
+- **THEN** the panel closes and the map remains available for continued browsing
 
 ### Requirement: Dual-map navigation
 Each station detail SHALL provide AMap and Baidu Maps navigation actions targeting the selected station from the participant's current location when supported. If app launch or positioning is restricted, the viewer SHALL offer a web-map attempt, address copy, and guidance to open the page in the system browser.

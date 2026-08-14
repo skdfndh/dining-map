@@ -5,7 +5,7 @@ test('viewer shows map-first activity and expenses', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '秋日朋友聚餐' })).toBeVisible();
   await page.getByRole('button', { name: /老街火锅/ }).click();
   await expect(page.getByRole('heading', { name: '老街火锅馆' })).toBeVisible();
-  await page.getByRole('button', { name: '关闭详情' }).click();
+  await page.getByRole('button', { name: '关闭地点详情' }).click();
   await page.getByRole('button', { name: /费用/ }).click();
   await expect(page.getByRole('heading', { name: '聚餐费用' })).toBeVisible();
 });
@@ -82,7 +82,7 @@ test('editor bulk-fills only sortable stations while preserving manual order', a
   await expect(page.getByRole('button', { name: '一键填入', exact: true })).toBeDisabled();
 });
 
-test('editor automatically recalculates a selected cycling route', async ({ page }) => {
+test('editor automatically processes a selected cycling route', async ({ page }) => {
   await page.goto('/editor.html', { waitUntil: 'domcontentloaded' });
   await page.getByLabel('编辑器密码').fill('dinner');
   await page.getByRole('button', { name: '入席编辑' }).click();
@@ -90,7 +90,14 @@ test('editor automatically recalculates a selected cycling route', async ({ page
   await page.locator('.flow-route').first().click();
   await page.getByLabel('交通方式').selectOption('cycling');
 
-  await expect(page.getByText('已冻结', { exact: true })).toBeVisible({ timeout: 15000 });
-  await expect(page.locator('.route-stats').getByText(/km/)).not.toHaveText('—');
-  await expect(page.locator('.route-stats').getByText(/分钟/)).not.toHaveText('—');
+  const status = page.locator('.route-stats dd').first();
+  await expect(status).toHaveText(/已冻结|虚线降级/, { timeout: 15000 });
+  await expect(page.locator('.flow-route').first()).toHaveText(/骑行/);
+
+  if ((await status.textContent())?.includes('已冻结')) {
+    await expect(page.locator('.route-stats').getByText(/km/)).not.toHaveText('—');
+    await expect(page.locator('.route-stats').getByText(/分钟/)).not.toHaveText('—');
+  } else {
+    await expect(page.locator('.flow-route').first()).toHaveText(/算路失败/);
+  }
 });

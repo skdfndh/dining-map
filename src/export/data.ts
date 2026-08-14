@@ -3,8 +3,17 @@ import { parseEvent, validateEvent } from '../domain/schema';
 import { calculateSettlement } from '../settlement/calculate';
 import { formatYuan } from '../settlement/money';
 
+export const MAX_EVENT_FILE_BYTES = 5 * 1024 * 1024;
+
 export function importEventJson(text: string): DiningEvent {
+  if (new Blob([text]).size > MAX_EVENT_FILE_BYTES)
+    throw new Error('活动文件超过 5 MB，请精简路线或活动内容后重试');
   return parseEvent(JSON.parse(text));
+}
+
+export function validateEventFileSize(file: Pick<File, 'size'>): void {
+  if (file.size > MAX_EVENT_FILE_BYTES)
+    throw new Error('活动文件超过 5 MB，请精简路线或活动内容后重试');
 }
 export function exportEventJson(event: DiningEvent): string {
   return JSON.stringify({ ...event, updatedAt: new Date().toISOString() }, null, 2);
@@ -45,7 +54,12 @@ export function downloadText(filename: string, text: string, type: string): void
   const url = URL.createObjectURL(new Blob([text], { type }));
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = filename;
+  anchor.download = [...filename]
+    .map((character) =>
+      character.charCodeAt(0) < 32 || '\\/:*?"<>|'.includes(character) ? '-' : character,
+    )
+    .join('')
+    .slice(0, 120);
   anchor.click();
   URL.revokeObjectURL(url);
 }

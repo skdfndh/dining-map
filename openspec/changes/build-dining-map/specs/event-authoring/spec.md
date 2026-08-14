@@ -22,6 +22,10 @@ The editor SHALL allow the organizer to define an activity name, optional date, 
 - **WHEN** the organizer selects a province and city and optionally a district or county
 - **THEN** the editor saves the linked administrative names and recenters an empty map to the selected area's approximate center
 
+#### Scenario: Delete a referenced participant
+- **WHEN** the organizer confirms deletion of a participant who appears in stations, expense allocations, or advances
+- **THEN** the editor removes every reference to that stable ID so no orphaned settlement or attendance data remains
+
 ### Requirement: Station detail authoring
 The editor SHALL allow each station visit to be created independently with a stable ID, short label, full name, address, coordinates, optional POI ID, activity description, participant selection, and optional organizer reminder. Two visits at the same coordinates SHALL remain separate stations.
 
@@ -58,6 +62,10 @@ The editor SHALL initially order exact times chronologically, order fuzzy period
 #### Scenario: Quickly delete an unscheduled station
 - **WHEN** the organizer selects the delete action on an unscheduled station card
 - **THEN** the editor removes that station and its dependent route or station-scoped expense data without first adding it to the itinerary
+
+#### Scenario: Reorder without a pointer
+- **WHEN** the organizer focuses an itinerary station and presses Alt with the up or down arrow key
+- **THEN** the editor moves that station one position in the requested direction using the same route reconciliation as drag-and-drop
 
 ### Requirement: Schedule feasibility warnings
 The editor SHALL compare adjacent station times with the route duration and SHALL warn when the itinerary implies insufficient travel time. Such warnings SHALL NOT prevent draft export or publication.

@@ -10,6 +10,7 @@ import {
   scheduleConflicts,
 } from '../src/domain/time';
 import { buildArea, citiesFor, districtsFor } from '../src/domain/areas';
+import { removeParticipant } from '../src/domain/event-mutations';
 
 describe('event domain', () => {
   it('creates independent blank dining activities', () => {
@@ -37,6 +38,16 @@ describe('event domain', () => {
     const legacy = { ...event, area: undefined };
     expect(parseEvent(JSON.parse(JSON.stringify(legacy))).city).toBe('上海');
     expect(() => parseEvent({ ...event, schemaVersion: 99 })).toThrow('版本过新');
+  });
+
+  it('rejects impossible clock values and out-of-range coordinates', () => {
+    const invalidTime = createSampleEvent();
+    invalidTime.stations[0].start = { kind: 'exact', time: '25:80', dayOffset: 0 };
+    expect(() => parseEvent(invalidTime)).toThrow();
+
+    const invalidCoordinate = createSampleEvent();
+    invalidCoordinate.stations[0].coordinate.lng = 999;
+    expect(() => parseEvent(invalidCoordinate)).toThrow();
   });
 
   it('detects duplicate stable ids', () => {
@@ -101,5 +112,26 @@ describe('event domain', () => {
     event.stations[0].end = { time: '14:20', dayOffset: 0 };
     event.stations[0].start = { kind: 'exact', time: '12:00', dayOffset: 0 };
     expect(scheduleConflicts(event)[0]?.lateByMinutes).toBe(12);
+  });
+
+  it('removes participant references from stations, allocations, and payments', () => {
+    const event = createSampleEvent();
+    event.expenses[0].allocation.customCents = { p_lin: 1200, p_zhou: 800 };
+    event.expenses[0].allocation.fixedCents = { p_lin: 500 };
+
+    const next = removeParticipant(event, 'p_lin');
+
+    expect(next.participants.some((person) => person.id === 'p_lin')).toBe(false);
+    expect(next.stations.every((station) => !station.participantIds.includes('p_lin'))).toBe(true);
+    expect(
+      next.expenses.every(
+        (expense) =>
+          !expense.allocation.includedParticipantIds.includes('p_lin') &&
+          !expense.payments.some((payment) => payment.participantId === 'p_lin') &&
+          !('p_lin' in (expense.allocation.weights ?? {})) &&
+          !('p_lin' in (expense.allocation.customCents ?? {})) &&
+          !('p_lin' in (expense.allocation.fixedCents ?? {})),
+      ),
+    ).toBe(true);
   });
 });

@@ -17,7 +17,6 @@ import {
   X,
 } from 'lucide-react';
 import type { DiningEvent, EntityId, RouteSegment, Station, ViewerState } from '../domain/types';
-import { parseEvent } from '../domain/schema';
 import { createSampleEvent } from '../domain/sample';
 import { formatStationTime } from '../domain/time';
 import { MapCanvas } from '../components/MapCanvas';
@@ -25,7 +24,8 @@ import { amapNavigationUrl, baiduNavigationUrl } from '../maps/navigation';
 import { calculateSettlement } from '../settlement/calculate';
 import { formatYuan } from '../settlement/money';
 import { loadViewerState, saveViewerState } from '../storage/viewer-state';
-import { inferCurrentStation } from './progress';
+import { importEventJson } from '../export/data';
+import { inferCurrentStation, sanitizeViewerState } from './progress';
 
 const modeNames: Record<RouteSegment['mode'], string> = {
   walking: '步行',
@@ -39,6 +39,7 @@ const modeNames: Record<RouteSegment['mode'], string> = {
 export function ViewerApp() {
   const [event, setEvent] = useState<DiningEvent>(createSampleEvent);
   const [loaded, setLoaded] = useState(false);
+  const [stateLoadedForEvent, setStateLoadedForEvent] = useState<string>();
   const [state, setState] = useState<ViewerState>({ arrivedStationIds: [], mode: 'overview' });
   const [selectedStationId, setSelectedStationId] = useState<EntityId>();
   const [selectedRouteId, setSelectedRouteId] = useState<EntityId>();
@@ -47,23 +48,46 @@ export function ViewerApp() {
   const [focusSignal, setFocusSignal] = useState('overview');
 
   useEffect(() => {
-    fetch('./event.json')
-      .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then((json) => {
-        const parsed = parseEvent(json);
+    const controller = new AbortController();
+    let cancelled = false;
+    fetch('./event.json', { signal: controller.signal })
+      .then((response) => (response.ok ? response.text() : Promise.reject()))
+      .then((text) => {
+        const parsed = importEventJson(text);
         if (parsed.stations.length) setEvent(parsed);
         else setLoadNotice('当前展示示例活动，编辑器导出的 event.json 替换后即可发布真实行程。');
       })
-      .catch(() => setLoadNotice('活动数据暂时无法读取，正在展示内置示例。'))
-      .finally(() => setLoaded(true));
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setLoadNotice('活动数据暂时无法读取，正在展示内置示例。');
+      })
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
   useEffect(() => {
     if (!loaded) return;
-    setState(loadViewerState(event.id));
-  }, [loaded, event.id]);
+    setState(sanitizeViewerState(event, loadViewerState(event.id)));
+    setStateLoadedForEvent(event.id);
+  }, [event, loaded]);
   useEffect(() => {
-    if (loaded) saveViewerState(event.id, state);
-  }, [event.id, loaded, state]);
+    if (stateLoadedForEvent === event.id) saveViewerState(event.id, state);
+  }, [event.id, state, stateLoadedForEvent]);
+  useEffect(() => {
+    if (!showExpenses && !selectedStationId && !selectedRouteId) return;
+    const closeOverlay = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key !== 'Escape') return;
+      if (showExpenses) setShowExpenses(false);
+      else if (selectedStationId) setSelectedStationId(undefined);
+      else setSelectedRouteId(undefined);
+    };
+    window.addEventListener('keydown', closeOverlay);
+    return () => window.removeEventListener('keydown', closeOverlay);
+  }, [selectedRouteId, selectedStationId, showExpenses]);
   const currentStationId = inferCurrentStation(event, state);
   const focusId = state.mode === 'step' ? (state.focusedStationId ?? currentStationId) : undefined;
   const selectedStation = event.stations.find((station) => station.id === selectedStationId);
@@ -146,9 +170,9 @@ export function ViewerApp() {
         </button>
       </header>
       {loadNotice && (
-        <div className="data-notice">
+        <div className="data-notice" role="status" aria-live="polite">
           {loadNotice}
-          <button onClick={() => setLoadNotice('')}>
+          <button aria-label="关闭活动数据提示" onClick={() => setLoadNotice('')}>
             <X />
           </button>
         </div>
@@ -261,18 +285,32 @@ function StationSheet({
   const participants = event.participants.filter((person) =>
     station.participantIds.includes(person.id),
   );
+  const [copyNotice, setCopyNotice] = useState('');
   async function copyAddress() {
-    await navigator.clipboard?.writeText(`${station.name} ${station.address}`);
+    try {
+      if (!navigator.clipboard) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(`${station.name} ${station.address}`);
+      setCopyNotice('地址已复制');
+    } catch {
+      setCopyNotice('复制失败，请长按地址手动复制');
+    }
   }
   return (
-    <section className="bottom-sheet station-sheet">
+    <section
+      className="bottom-sheet station-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="station-sheet-title"
+    >
       <div className="sheet-handle" />
       <header>
         <div>
           <p className="eyebrow">STOP {event.itinerary.indexOf(station.id) + 1}</p>
-          <h2 className="display-type">{station.name}</h2>
+          <h2 className="display-type" id="station-sheet-title">
+            {station.name}
+          </h2>
         </div>
-        <button aria-label="关闭详情" onClick={onClose}>
+        <button aria-label="关闭地点详情" autoFocus onClick={onClose}>
           <X />
         </button>
       </header>
@@ -287,6 +325,11 @@ function StationSheet({
           <Clipboard />
         </button>
       </p>
+      {copyNotice && (
+        <p className="copy-notice" role="status" aria-live="polite">
+          {copyNotice}
+        </p>
+      )}
       {station.activity && <p className="activity-copy">{station.activity}</p>}
       {station.reminder && (
         <div className="reminder-card">
@@ -319,17 +362,22 @@ function StationSheet({
 
 function RouteSheet({ route, onClose }: { route: RouteSegment; onClose: () => void }) {
   return (
-    <section className="bottom-sheet route-sheet">
+    <section
+      className="bottom-sheet route-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="route-sheet-title"
+    >
       <div className="sheet-handle" />
       <header>
         <div>
           <p className="eyebrow">ON THE WAY</p>
-          <h2 className="display-type">
+          <h2 className="display-type" id="route-sheet-title">
             {modeNames[route.mode]} ·{' '}
             {route.durationMinutes ? `${route.durationMinutes} 分钟` : '耗时待定'}
           </h2>
         </div>
-        <button aria-label="关闭详情" onClick={onClose}>
+        <button aria-label="关闭路线详情" autoFocus onClick={onClose}>
           <X />
         </button>
       </header>
@@ -375,13 +423,20 @@ function ExpenseSheet({
         ? '结算整理中，金额可能变化'
         : '结算已完成';
   return (
-    <section className="expense-sheet-full">
+    <section
+      className="expense-sheet-full"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="expense-sheet-title"
+    >
       <header>
         <div>
           <p className="eyebrow">SETTLEMENT</p>
-          <h2 className="display-type">聚餐费用</h2>
+          <h2 className="display-type" id="expense-sheet-title">
+            聚餐费用
+          </h2>
         </div>
-        <button onClick={onClose}>
+        <button aria-label="关闭费用详情" autoFocus onClick={onClose}>
           <X />
         </button>
       </header>
@@ -402,10 +457,18 @@ function ExpenseSheet({
         </select>
       </label>
       <div className="expense-section-tabs">
-        <button className={section === 'mine' ? 'active' : ''} onClick={() => setSection('mine')}>
+        <button
+          className={section === 'mine' ? 'active' : ''}
+          aria-pressed={section === 'mine'}
+          onClick={() => setSection('mine')}
+        >
           我的账单
         </button>
-        <button className={section === 'all' ? 'active' : ''} onClick={() => setSection('all')}>
+        <button
+          className={section === 'all' ? 'active' : ''}
+          aria-pressed={section === 'all'}
+          onClick={() => setSection('all')}
+        >
           全部结算
         </button>
       </div>
@@ -507,7 +570,10 @@ function ExpenseSheet({
             : '全局费用';
           return (
             <article key={expense.id}>
-              <button onClick={() => setExpanded(expanded === expense.id ? undefined : expense.id)}>
+              <button
+                aria-expanded={expanded === expense.id}
+                onClick={() => setExpanded(expanded === expense.id ? undefined : expense.id)}
+              >
                 <span>
                   <b>{expense.name}</b>
                   <small>

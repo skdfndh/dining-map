@@ -132,6 +132,8 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 .header-actions button,
 .icon-button {
@@ -177,6 +179,8 @@ textarea:focus {
 .inspector-panel {
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   background: rgba(255, 250, 241, 0.88);
 }
 .resource-panel {
@@ -677,6 +681,8 @@ textarea:focus {
   align-items: center;
   gap: 4px;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
   padding: 14px 18px;
 }
 .flow-pair {
@@ -807,6 +813,13 @@ textarea:focus {
   border-radius: 28px;
   background: var(--cream-100);
   box-shadow: var(--shadow-lift);
+  animation: preview-in 0.24s var(--ease-table) both;
+}
+@keyframes preview-in {
+  from {
+    transform: translateY(12px) scale(0.985);
+    opacity: 0;
+  }
 }
 .preview-modal > header {
   display: flex;
@@ -833,5 +846,19 @@ textarea:focus {
   }
   .header-actions button svg {
     margin: 0;
+  }
+}
+@media (max-width: 920px) {
+  .editor-grid {
+    grid-template-columns: 230px minmax(280px, 1fr) 290px;
+  }
+  .editor-header {
+    padding-inline: 14px;
+  }
+  .editor-header h1 {
+    max-width: 210px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }

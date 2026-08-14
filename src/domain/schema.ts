@@ -4,9 +4,10 @@ import { scheduleConflicts } from './time';
 import { SCHEMA_VERSION, type DiningEvent, type ValidationIssue } from './types';
 import { calculateSettlement } from '../settlement/calculate';
 
+const clockTime = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
 const exactTime = z.object({
   kind: z.literal('exact'),
-  time: z.string().regex(/^\d{2}:\d{2}$/),
+  time: clockTime,
   dayOffset: z.number().int().nonnegative(),
 });
 const stationTime = z.discriminatedUnion('kind', [
@@ -17,7 +18,11 @@ const stationTime = z.discriminatedUnion('kind', [
   }),
   z.object({ kind: z.literal('pending') }),
 ]);
-const coordinate = z.object({ lng: z.number(), lat: z.number(), system: z.literal('GCJ02') });
+const coordinate = z.object({
+  lng: z.number().finite().min(-180).max(180),
+  lat: z.number().finite().min(-90).max(90),
+  system: z.literal('GCJ02'),
+});
 const administrativeArea = z.object({
   province: z.string(),
   provinceCode: z.string(),
@@ -41,7 +46,7 @@ const station = z.object({
   poiId: z.string().optional(),
   sourceUrl: z.string().optional(),
   start: stationTime,
-  end: z.object({ time: z.string(), dayOffset: z.number().int().nonnegative() }).optional(),
+  end: z.object({ time: clockTime, dayOffset: z.number().int().nonnegative() }).optional(),
   activity: z.string().optional(),
   participantIds: z.array(z.string()),
   reminder: z.string().optional(),
@@ -53,9 +58,14 @@ const route = z.object({
   mode: z.enum(['walking', 'cycling', 'driving', 'taxi', 'transit', 'custom']),
   identityKey: z.string(),
   status: z.enum(['ready', 'stale', 'fallback']),
-  distanceMeters: z.number().optional(),
-  durationMinutes: z.number().optional(),
-  geometry: z.array(z.object({ lng: z.number(), lat: z.number() })),
+  distanceMeters: z.number().finite().nonnegative().optional(),
+  durationMinutes: z.number().finite().nonnegative().optional(),
+  geometry: z.array(
+    z.object({
+      lng: z.number().finite().min(-180).max(180),
+      lat: z.number().finite().min(-90).max(90),
+    }),
+  ),
   calculatedAt: z.string().optional(),
   manualDescription: z.string().optional(),
 });
@@ -70,9 +80,9 @@ const expense = z.object({
   allocation: z.object({
     mode: z.enum(['equal', 'weighted', 'custom', 'fixed_then_equal', 'fixed_then_weighted']),
     includedParticipantIds: z.array(z.string()),
-    weights: z.record(z.number()).optional(),
-    customCents: z.record(z.number().int()).optional(),
-    fixedCents: z.record(z.number().int()).optional(),
+    weights: z.record(z.number().finite().positive()).optional(),
+    customCents: z.record(z.number().int().nonnegative()).optional(),
+    fixedCents: z.record(z.number().int().nonnegative()).optional(),
   }),
   payments: z.array(
     z.object({ participantId: z.string(), amountCents: z.number().int().nonnegative() }),

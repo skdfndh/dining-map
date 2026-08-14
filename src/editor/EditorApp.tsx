@@ -33,6 +33,7 @@ import type {
 } from '../domain/types';
 import { FUZZY_PERIODS } from '../domain/types';
 import { createId } from '../domain/id';
+import { removeParticipant } from '../domain/event-mutations';
 import { areaSearchName, buildArea, citiesFor, districtsFor, provinces } from '../domain/areas';
 import { createBlankEvent, createSampleEvent } from '../domain/sample';
 import {
@@ -73,6 +74,7 @@ import {
   exportEventJson,
   exportSettlementCsv,
   importEventJson,
+  validateEventFileSize,
 } from '../export/data';
 import { calculateExpense, calculateSettlement } from '../settlement/calculate';
 import { formatYuan, parseYuan } from '../settlement/money';
@@ -180,12 +182,16 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   const importedRef = useRef<HTMLInputElement>(null);
   const draftLoadedRef = useRef(false);
   const areaRequestRef = useRef(0);
+  const newParticipantIdsRef = useRef(new Set<EntityId>());
   const eventRef = useRef(event);
   eventRef.current = event;
 
   useEffect(() => {
     loadDraft().then((draft) => {
-      if (draft) setEvent({ ...draft, routes: reconcileRoutes(draft) });
+      if (draft) {
+        newParticipantIdsRef.current.clear();
+        setEvent({ ...draft, routes: reconcileRoutes(draft) });
+      }
       draftLoadedRef.current = true;
       setSaveStatus('saved');
     });
@@ -194,6 +200,14 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
     if (!draftLoadedRef.current) return;
     autosave(event, setSaveStatus);
   }, [event]);
+  useEffect(() => {
+    if (!preview) return;
+    const closePreview = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key === 'Escape') setPreview(false);
+    };
+    window.addEventListener('keydown', closePreview);
+    return () => window.removeEventListener('keydown', closePreview);
+  }, [preview]);
   const staleRouteSignature = event.routes
     .filter((route) => route.status === 'stale')
     .map((route) => route.identityKey)
@@ -297,6 +311,24 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
       setPanel('activity');
     }
   }
+  function deleteParticipant(participant: Participant) {
+    const hasReferences =
+      event.stations.some((station) => station.participantIds.includes(participant.id)) ||
+      event.expenses.some(
+        (expense) =>
+          expense.allocation.includedParticipantIds.includes(participant.id) ||
+          expense.payments.some((payment) => payment.participantId === participant.id),
+      );
+    if (
+      hasReferences &&
+      !window.confirm(
+        `删除“${participant.name || '未命名'}”？相关站点参与记录、分摊和垫付也会移除。`,
+      )
+    )
+      return;
+    newParticipantIdsRef.current.delete(participant.id);
+    commit(removeParticipant(event, participant.id));
+  }
 
   async function searchPlaces() {
     if (!searchQuery.trim()) return;
@@ -336,7 +368,9 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   async function importFile(file: File) {
     const current = event;
     try {
+      validateEventFileSize(file);
       const parsed = importEventJson(await file.text());
+      newParticipantIdsRef.current.clear();
       setEvent({ ...parsed, routes: reconcileRoutes(parsed) });
       setSearchMessage('活动数据导入成功');
     } catch (error) {
@@ -362,6 +396,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   async function startNewEvent() {
     if (!window.confirm('新建聚餐安排？当前活动会保留为可恢复的上一个活动。')) return;
     await savePreviousEvent(event);
+    newParticipantIdsRef.current.clear();
     setEvent(createBlankEvent());
     setSelectedStationId(undefined);
     setSelectedRouteId(undefined);
@@ -379,6 +414,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
     if (!window.confirm(`恢复“${previous.title || '未命名聚餐'}”？当前内容将成为新的本地快照。`))
       return;
     await savePreviousEvent(event);
+    newParticipantIdsRef.current.clear();
     setEvent({ ...previous, routes: reconcileRoutes(previous) });
     setSelectedStationId(undefined);
     setSelectedRouteId(undefined);
@@ -394,7 +430,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
           <h1 className="display-type">聚餐地图 · 行程编排台</h1>
         </div>
         <div className="header-actions">
-          <span className={`save-state ${saveStatus}`}>
+          <span className={`save-state ${saveStatus}`} role="status" aria-live="polite">
             <Save size={15} />
             {saveStatus === 'saving'
               ? '保存中'
@@ -407,7 +443,11 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
             hidden
             type="file"
             accept="application/json"
-            onChange={(e) => e.target.files?.[0] && importFile(e.target.files[0])}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) importFile(file);
+            }}
           />
           <button className="new-event-button" onClick={startNewEvent}>
             <Plus />
@@ -470,7 +510,11 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
               <button onClick={parseLink}>识别地图链接</button>
               <span>悬停地名后右键精确选点</span>
             </div>
-            {searchMessage && <p className="helper-message">{searchMessage}</p>}
+            {searchMessage && (
+              <p className="helper-message" role="status" aria-live="polite">
+                {searchMessage}
+              </p>
+            )}
             {searchResults.map((place) => (
               <button
                 className="search-result"
@@ -490,9 +534,11 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
               </h2>
               <button
                 aria-label="添加参与人"
-                onClick={() =>
-                  setEvent({ ...event, participants: [...event.participants, emptyParticipant()] })
-                }
+                onClick={() => {
+                  const participant = emptyParticipant();
+                  newParticipantIdsRef.current.add(participant.id);
+                  setEvent({ ...event, participants: [...event.participants, participant] });
+                }}
               >
                 <Plus />
               </button>
@@ -501,6 +547,14 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
               <div className="person-row" key={participant.id}>
                 <input
                   value={participant.name}
+                  aria-label={`参与人姓名：${participant.name || '未命名'}`}
+                  onFocus={() => {
+                    if (!newParticipantIdsRef.current.delete(participant.id)) return;
+                    setEvent((current) => ({
+                      ...current,
+                      participants: updateById(current.participants, participant.id, { name: '' }),
+                    }));
+                  }}
                   onChange={(e) =>
                     setEvent({
                       ...event,
@@ -512,6 +566,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
                 />
                 <input
                   value={participant.note ?? ''}
+                  aria-label={`参与人备注：${participant.name || '未命名'}`}
                   placeholder="备注"
                   onChange={(e) =>
                     setEvent({
@@ -523,13 +578,8 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
                   }
                 />
                 <button
-                  aria-label="删除参与人"
-                  onClick={() =>
-                    setEvent({
-                      ...event,
-                      participants: event.participants.filter((item) => item.id !== participant.id),
-                    })
-                  }
+                  aria-label={`删除参与人 ${participant.name || '未命名'}`}
+                  onClick={() => deleteParticipant(participant)}
                 >
                   <X />
                 </button>
@@ -616,6 +666,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
               }}
               onClear={async () => {
                 await clearDraft();
+                newParticipantIdsRef.current.clear();
                 setEvent(createSampleEvent());
               }}
               onRestorePrevious={restorePreviousEvent}
@@ -694,14 +745,27 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
                 <button
                   draggable
                   className={`flow-station ${selectedStationId === id ? 'selected' : ''}`}
+                  aria-label={`第${index + 1}站 ${station.shortName}。按 Alt 加上下方向键调整顺序`}
+                  title="可拖动；键盘使用 Alt + ↑/↓ 调整顺序"
                   onDragStart={() => setDraggingStationId(id)}
                   onDragEnd={() => setDraggingStationId(undefined)}
                   onClick={() => selectStation(id)}
+                  onKeyDown={(keyboardEvent) => {
+                    if (!keyboardEvent.altKey) return;
+                    if (keyboardEvent.key === 'ArrowUp') {
+                      keyboardEvent.preventDefault();
+                      moveStation(id, -1);
+                    }
+                    if (keyboardEvent.key === 'ArrowDown') {
+                      keyboardEvent.preventDefault();
+                      moveStation(id, 1);
+                    }
+                  }}
                 >
                   <b>{index + 1}</b>
                   <span>{formatStationTime(station.start)}</span>
                   <strong>{station.shortName}</strong>
-                  <i>
+                  <i aria-hidden="true">
                     <ArrowUp
                       onClick={(e) => {
                         e.stopPropagation();
@@ -748,14 +812,27 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
         </div>
       </footer>
       {preview && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
+        <div
+          className="modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="preview-title"
+          onMouseDown={(mouseEvent) => {
+            if (mouseEvent.target === mouseEvent.currentTarget) setPreview(false);
+          }}
+        >
           <section className="preview-modal">
             <header>
               <div>
                 <p className="eyebrow">MOBILE PREVIEW</p>
-                <h2>参与者看到的地图</h2>
+                <h2 id="preview-title">参与者看到的地图</h2>
               </div>
-              <button className="icon-button" onClick={() => setPreview(false)}>
+              <button
+                className="icon-button"
+                aria-label="关闭预览"
+                autoFocus
+                onClick={() => setPreview(false)}
+              >
                 <X />
               </button>
             </header>

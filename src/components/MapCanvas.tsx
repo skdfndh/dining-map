@@ -5,6 +5,7 @@ import { formatStationTimeRange } from '../domain/time';
 import { hasAmapConfig, loadAmap, type AMapMap, type AMapOverlay } from '../maps/amap-loader';
 import type { MapPickTarget } from '../maps/types';
 import { createHotspotTracker } from '../maps/pick';
+import { createStationMarkerContent } from './station-marker';
 import './map-canvas.css';
 
 interface MapCanvasProps {
@@ -46,9 +47,23 @@ export function MapCanvas(props: MapCanvasProps) {
   const mapRef = useRef<AMapMap | undefined>(undefined);
   const hotspotTrackerRef = useRef(createHotspotTracker());
   const overlaysRef = useRef<AMapOverlay[]>([]);
+  const manuallyExploredRef = useRef(false);
+  const fittedDataKeyRef = useRef('');
+  const previousFocusSignalRef = useRef<string | undefined>(undefined);
   const [mapError, setMapError] = useState<string>();
   const [mapReady, setMapReady] = useState(false);
   const canUseAmap = hasAmapConfig();
+  const viewportDataKey = useMemo(
+    () =>
+      [
+        event.area?.center ? `${event.area.center.lng},${event.area.center.lat}` : '',
+        event.itinerary.join(','),
+        ...event.stations.map(
+          (station) => `${station.id}:${station.coordinate.lng},${station.coordinate.lat}`,
+        ),
+      ].join('|'),
+    [event.area?.center, event.itinerary, event.stations],
+  );
   const callbacksRef = useRef({ onSelectStation, onSelectRoute, onPickCoordinate });
   useEffect(() => {
     callbacksRef.current = { onSelectStation, onSelectRoute, onPickCoordinate };
@@ -57,6 +72,7 @@ export function MapCanvas(props: MapCanvasProps) {
   useEffect(() => {
     if (!canUseAmap || !containerRef.current) return;
     let cancelled = false;
+    let removeExplorationListeners = () => {};
     setMapReady(false);
     loadAmap()
       .then((sdk) => {
@@ -67,6 +83,18 @@ export function MapCanvas(props: MapCanvasProps) {
           isHotspot: true,
           mapStyle: 'amap://styles/whitesmoke',
         });
+        const mapContainer = containerRef.current;
+        const markAsExplored = () => {
+          manuallyExploredRef.current = true;
+        };
+        mapContainer.addEventListener('pointerdown', markAsExplored);
+        mapContainer.addEventListener('wheel', markAsExplored, { passive: true });
+        mapContainer.addEventListener('touchstart', markAsExplored, { passive: true });
+        removeExplorationListeners = () => {
+          mapContainer.removeEventListener('pointerdown', markAsExplored);
+          mapContainer.removeEventListener('wheel', markAsExplored);
+          mapContainer.removeEventListener('touchstart', markAsExplored);
+        };
         setMapReady(true);
         if (interactivePick) {
           mapRef.current.on('hotspotover', (event) => {
@@ -102,16 +130,23 @@ export function MapCanvas(props: MapCanvasProps) {
       .catch((error: Error) => setMapError(error.message));
     return () => {
       cancelled = true;
+      removeExplorationListeners();
       mapRef.current?.destroy();
       mapRef.current = undefined;
+      overlaysRef.current = [];
+      fittedDataKeyRef.current = '';
+      previousFocusSignalRef.current = undefined;
+      manuallyExploredRef.current = false;
     };
   }, [canUseAmap, interactivePick]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
+    let cancelled = false;
     loadAmap()
       .then((sdk) => {
+        if (cancelled || mapRef.current !== map) return;
         if (overlaysRef.current.length) map.remove(overlaysRef.current);
         const stationIndex = new Map(event.itinerary.map((id, index) => [id, index]));
         const overlays: AMapOverlay[] = [];
@@ -132,11 +167,13 @@ export function MapCanvas(props: MapCanvasProps) {
         });
         event.stations.forEach((station) => {
           const index = stationIndex.get(station.id) ?? -1;
-          const content = document.createElement('button');
           const isPast = arrivedStationIds?.includes(station.id);
-          content.className = `amap-table-marker ${station.id === currentStationId ? 'is-current' : ''} ${isPast ? 'is-past' : ''}`;
-          content.innerHTML = `<b>${index + 1}</b><span>${formatStationTimeRange(station)}</span><strong>${station.shortName}</strong>`;
-          content.setAttribute('aria-label', `第${index + 1}站 ${station.shortName}`);
+          const content = createStationMarkerContent(
+            station,
+            index,
+            station.id === currentStationId,
+            isPast,
+          );
           const marker = new sdk.Marker({
             position: [station.coordinate.lng, station.coordinate.lat],
             content,
@@ -149,14 +186,30 @@ export function MapCanvas(props: MapCanvasProps) {
         });
         map.add(overlays);
         overlaysRef.current = overlays;
+        const dataChanged = fittedDataKeyRef.current !== viewportDataKey;
+        const focusRequested = previousFocusSignalRef.current !== focusSignal;
         if (selectedStationId) {
           const station = event.stations.find((item) => item.id === selectedStationId);
-          if (station) map.setZoomAndCenter(15, [station.coordinate.lng, station.coordinate.lat]);
-        } else if (overlays.length) map.setFitView(overlays, false, [80, 80, 120, 80]);
-        else if (event.area?.center)
+          if (station) {
+            manuallyExploredRef.current = false;
+            map.setZoomAndCenter(15, [station.coordinate.lng, station.coordinate.lat]);
+          }
+        } else if (overlays.length && (dataChanged || focusRequested)) {
+          manuallyExploredRef.current = false;
+          map.setFitView(overlays, false, [80, 80, 120, 80]);
+        } else if (!overlays.length && event.area?.center && (dataChanged || focusRequested)) {
+          manuallyExploredRef.current = false;
           map.setZoomAndCenter(11, [event.area.center.lng, event.area.center.lat]);
+        }
+        fittedDataKeyRef.current = viewportDataKey;
+        previousFocusSignalRef.current = focusSignal;
       })
-      .catch((error: Error) => setMapError(error.message));
+      .catch((error: Error) => {
+        if (!cancelled) setMapError(error.message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [
     event,
     selectedStationId,
@@ -165,16 +218,33 @@ export function MapCanvas(props: MapCanvasProps) {
     arrivedStationIds,
     focusSignal,
     mapReady,
+    viewportDataKey,
   ]);
 
   useEffect(() => {
-    if (!mapReady || !mapRef.current || event.stations.length || !event.area?.center) return;
-    mapRef.current.setZoomAndCenter(11, [event.area.center.lng, event.area.center.lat]);
-  }, [event.area?.center, event.stations.length, mapReady]);
+    if (!mapReady || !containerRef.current || typeof ResizeObserver === 'undefined') return;
+    let animationFrame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        map.resize();
+        if (!manuallyExploredRef.current && overlaysRef.current.length) {
+          map.setFitView(overlaysRef.current, false, [80, 80, 120, 80]);
+        }
+      });
+    });
+    observer.observe(containerRef.current);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(animationFrame);
+    };
+  }, [mapReady]);
 
   if (!canUseAmap || mapError) return <FallbackMap {...props} message={mapError} />;
   return (
-    <div className="map-canvas">
+    <div className="map-canvas" aria-label="聚餐行程地图" aria-busy={!mapReady}>
       <div ref={containerRef} className="map-sdk" />
       {!mapReady && (
         <div className="map-loading-fallback">
@@ -210,7 +280,7 @@ function FallbackMap(props: MapCanvasProps & { message?: string }) {
   }, [props.event.stations]);
   const stationIndex = new Map(props.event.itinerary.map((id, index) => [id, index]));
   return (
-    <div className="map-canvas fallback-map" aria-label="行程路线示意图">
+    <div className="map-canvas fallback-map" role="region" aria-label="行程路线示意图">
       <div className="paper-grain" />
       <svg
         className="route-sketch"
@@ -232,6 +302,15 @@ function FallbackMap(props: MapCanvasProps & { message?: string }) {
               stroke={routeColors[route.mode]}
               className={route.status === 'ready' ? '' : 'dashed'}
               onClick={() => props.onSelectRoute?.(route.id)}
+              tabIndex={props.onSelectRoute ? 0 : undefined}
+              role={props.onSelectRoute ? 'button' : undefined}
+              aria-label={props.onSelectRoute ? `${route.mode}路线` : undefined}
+              onKeyDown={(keyboardEvent) => {
+                if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                  keyboardEvent.preventDefault();
+                  props.onSelectRoute?.(route.id);
+                }
+              }}
             />
           );
         })}
@@ -247,8 +326,13 @@ function FallbackMap(props: MapCanvasProps & { message?: string }) {
             className={`table-marker ${station.id === props.currentStationId ? 'is-current' : ''} ${past ? 'is-past' : ''} ${station.id === props.selectedStationId ? 'is-selected' : ''}`}
             style={{ left: `${point.x}%`, top: `${point.y}%` }}
             onClick={() => props.onSelectStation?.(station.id)}
+            aria-label={
+              stationIndex.has(station.id)
+                ? `第${(stationIndex.get(station.id) ?? 0) + 1}站 ${station.shortName}`
+                : `待安排站点 ${station.shortName}`
+            }
           >
-            <b>{(stationIndex.get(station.id) ?? 0) + 1}</b>
+            <b>{stationIndex.has(station.id) ? (stationIndex.get(station.id) ?? 0) + 1 : '待'}</b>
             <span>{formatStationTimeRange(station)}</span>
             <strong>{station.shortName}</strong>
           </button>
@@ -265,7 +349,7 @@ function FallbackMap(props: MapCanvasProps & { message?: string }) {
         </div>
       )}
       {props.message && (
-        <div className="map-warning">
+        <div className="map-warning" role="alert">
           <AlertCircle size={16} />
           {props.message}
         </div>
