@@ -83,6 +83,10 @@ Each station detail SHALL provide AMap and Baidu Maps navigation actions targeti
 - **WHEN** a participant chooses Baidu navigation for a station
 - **THEN** the viewer opens Baidu's web direction service with the GCJ-02 destination, required HTML output, and a valid web application source identifier
 
+#### Scenario: Open AMap navigation from the current location
+- **WHEN** a participant chooses AMap navigation on a mobile device
+- **THEN** the viewer opens AMap's route URI with an empty origin, a GCJ-02 `longitude,latitude,name` destination, driving mode, and native-app launch enabled so AMap can use the participant's current location
+
 ### Requirement: Personal itinerary focus
 The viewer SHALL expose `我是谁` from the map surface independently of settlement status. After a participant selects a stable participant ID, the map SHALL label stations they attend as `有我`, label stations they do not attend as `不参加`, visually prioritize relevant stations and route segments without hiding the complete itinerary, and show the same identity in station details and expense settlement. The selection SHALL remain local to that browser.
 

@@ -14,9 +14,27 @@ import { createHotspotTracker, resolveMapPickTarget } from '../src/maps/pick';
 import { areaSearchRequest, buildArea } from '../src/domain/areas';
 import { decideMapViewport } from '../src/maps/viewport';
 import { resolveOfflineAreaCenter } from '../src/domain/area-center';
-import { baiduNavigationUrl } from '../src/maps/navigation';
+import { amapNavigationUrl, baiduNavigationUrl } from '../src/maps/navigation';
 
 describe('maps and progress', () => {
+  it('builds an AMap route from the mobile current location to the station', () => {
+    const station = createSampleEvent().stations[0];
+    station.name = '老街火锅,东门';
+    const url = new URL(amapNavigationUrl(station));
+
+    expect(url.origin).toBe('https://uri.amap.com');
+    expect(url.pathname).toBe('/navigation');
+    expect(url.searchParams.get('from')).toBe('');
+    expect(url.searchParams.get('to')).toBe(
+      `${station.coordinate.lng},${station.coordinate.lat},老街火锅 东门`,
+    );
+    expect(url.searchParams.get('mode')).toBe('car');
+    expect(url.searchParams.get('src')).toBe('dining-map');
+    expect(url.searchParams.get('callnative')).toBe('1');
+    expect(url.searchParams.has('dlat')).toBe(false);
+    expect(url.searchParams.has('dlon')).toBe(false);
+  });
+
   it('builds a valid Baidu web navigation URL', () => {
     const station = createSampleEvent().stations[0];
     const url = new URL(baiduNavigationUrl(station));

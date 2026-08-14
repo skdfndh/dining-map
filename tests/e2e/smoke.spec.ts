@@ -6,10 +6,8 @@ import { encryptEventJson } from '../../src/export/encryption';
 const VIEWER_TEST_PASSWORD = 'test-only-password-123';
 
 test('viewer shows map-first activity and expenses', async ({ page }) => {
-  const envelope = await encryptEventJson(
-    exportEventJson(createSampleEvent()),
-    VIEWER_TEST_PASSWORD,
-  );
+  const event = createSampleEvent();
+  const envelope = await encryptEventJson(exportEventJson(event), VIEWER_TEST_PASSWORD);
   await page.route('**/event.enc.json', (route) =>
     route.fulfill({
       status: 200,
@@ -28,10 +26,19 @@ test('viewer shows map-first activity and expenses', async ({ page }) => {
   await expect(page.getByText('正在以 小王 的身份查看')).toBeVisible();
   await expect(page.locator('.amap-table-marker.is-mine')).toHaveCount(3);
   await expect(page.locator('.amap-table-marker.not-mine')).toHaveCount(1);
-  await page.getByRole('button', { name: /老街火锅/ }).click();
+  const firstStation = event.stations.find((station) => station.id === 's_hotpot')!;
+  await page.locator('.amap-table-marker').filter({ hasText: firstStation.shortName }).click();
   await expect(page.getByRole('heading', { name: '老街火锅馆' })).toBeVisible();
   await expect(page.getByText('小王 · 我')).toBeVisible();
   await expect(page.getByText('小王参加这一站')).toBeVisible();
+  const amapHref = await page.getByRole('link', { name: '高德导航' }).getAttribute('href');
+  expect(amapHref).not.toBeNull();
+  const amapNavigation = new URL(amapHref!);
+  expect(amapNavigation.searchParams.get('from')).toBe('');
+  expect(amapNavigation.searchParams.get('to')).toBe(
+    `${firstStation.coordinate.lng},${firstStation.coordinate.lat},${firstStation.name}`,
+  );
+  expect(amapNavigation.searchParams.get('callnative')).toBe('1');
   const baiduNavigation = page.getByRole('link', { name: '百度导航' });
   await expect(baiduNavigation).toHaveAttribute('href', /output=html/);
   await expect(baiduNavigation).toHaveAttribute('href', /src=webapp\.skdfndh\.diningmap/);

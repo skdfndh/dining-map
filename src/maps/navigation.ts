@@ -2,12 +2,12 @@ import type { Station } from '../domain/types';
 
 export function amapNavigationUrl(station: Station): string {
   const params = new URLSearchParams({
-    from: '聚餐地图',
-    sourceApplication: 'dining-map',
-    pname: station.name,
-    dlat: String(station.coordinate.lat),
-    dlon: String(station.coordinate.lng),
-    dev: '0',
+    from: '',
+    to: `${station.coordinate.lng},${station.coordinate.lat},${station.name.replaceAll(',', ' ')}`,
+    mode: 'car',
+    policy: '0',
+    src: 'dining-map',
+    callnative: '1',
   });
   return `https://uri.amap.com/navigation?${params}`;
 }
