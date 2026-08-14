@@ -7,6 +7,7 @@ import {
   Download,
   Eye,
   FileUp,
+  History,
   KeyRound,
   LogOut,
   MapPin,
@@ -16,6 +17,7 @@ import {
   Save,
   Search,
   Trash2,
+  UserPlus,
   Users,
   Wallet,
   X,
@@ -68,6 +70,15 @@ import {
   hasEditorSession,
   verifyPassword,
 } from '../storage/auth';
+import {
+  createParticipantFromHistory,
+  loadParticipantHistory,
+  mergeParticipantHistory,
+  participantHistoryInitial,
+  participantHistoryKey,
+  saveParticipantHistory,
+  type ParticipantHistoryEntry,
+} from '../storage/participant-history';
 import { EDITOR_PASSWORD_CONFIG } from '../config/editor';
 import {
   downloadText,
@@ -179,6 +190,10 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<PlaceCandidate[]>([]);
   const [searchMessage, setSearchMessage] = useState('');
+  const [participantHistory, setParticipantHistory] = useState(loadParticipantHistory);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyInitial, setHistoryInitial] = useState('ALL');
+  const [historyNotice, setHistoryNotice] = useState('');
   const importedRef = useRef<HTMLInputElement>(null);
   const draftLoadedRef = useRef(false);
   const areaRequestRef = useRef(0);
@@ -186,12 +201,35 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   const eventRef = useRef(event);
   eventRef.current = event;
 
+  const availableHistoryInitials = useMemo(
+    () =>
+      [...new Set(participantHistory.map((entry) => participantHistoryInitial(entry.name)))].sort(
+        (left, right) => (left === '#' ? 1 : right === '#' ? -1 : left.localeCompare(right)),
+      ),
+    [participantHistory],
+  );
+  const visibleHistory = useMemo(
+    () =>
+      historyInitial === 'ALL'
+        ? participantHistory
+        : participantHistory.filter(
+            (entry) => participantHistoryInitial(entry.name) === historyInitial,
+          ),
+    [historyInitial, participantHistory],
+  );
+  const currentParticipantKeys = useMemo(
+    () => new Set(event.participants.map(participantHistoryKey)),
+    [event.participants],
+  );
+
   useEffect(() => {
     loadDraft().then((draft) => {
+      const restoredEvent = draft ? { ...draft, routes: reconcileRoutes(draft) } : eventRef.current;
       if (draft) {
         newParticipantIdsRef.current.clear();
-        setEvent({ ...draft, routes: reconcileRoutes(draft) });
+        setEvent(restoredEvent);
       }
+      rememberParticipantsInHistory(restoredEvent.participants);
       draftLoadedRef.current = true;
       setSaveStatus('saved');
     });
@@ -326,8 +364,38 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
       )
     )
       return;
+    rememberParticipantsInHistory([participant]);
     newParticipantIdsRef.current.delete(participant.id);
     commit(removeParticipant(event, participant.id));
+  }
+  function rememberParticipantsInHistory(participants: Array<Pick<Participant, 'name' | 'note'>>) {
+    setParticipantHistory((current) => {
+      const next = mergeParticipantHistory(current, participants);
+      saveParticipantHistory(next);
+      return next;
+    });
+  }
+  function addNewParticipant() {
+    const participant = emptyParticipant();
+    newParticipantIdsRef.current.add(participant.id);
+    setEvent((current) => ({
+      ...current,
+      participants: [...current.participants, participant],
+    }));
+    setHistoryOpen(false);
+    setHistoryNotice('已新建参与人，请填写姓名');
+  }
+  function addHistoricalParticipant(entry: ParticipantHistoryEntry) {
+    const entryKey = participantHistoryKey(entry);
+    if (currentParticipantKeys.has(entryKey)) return;
+    const participant = createParticipantFromHistory(entry);
+    setEvent((current) =>
+      current.participants.some((person) => participantHistoryKey(person) === entryKey)
+        ? current
+        : { ...current, participants: [...current.participants, participant] },
+    );
+    rememberParticipantsInHistory([participant]);
+    setHistoryNotice(`已添加 ${entry.name}`);
   }
 
   async function searchPlaces() {
@@ -370,6 +438,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
     try {
       validateEventFileSize(file);
       const parsed = importEventJson(await file.text());
+      rememberParticipantsInHistory([...event.participants, ...parsed.participants]);
       newParticipantIdsRef.current.clear();
       setEvent({ ...parsed, routes: reconcileRoutes(parsed) });
       setSearchMessage('活动数据导入成功');
@@ -396,6 +465,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   async function startNewEvent() {
     if (!window.confirm('新建聚餐安排？当前活动会保留为可恢复的上一个活动。')) return;
     await savePreviousEvent(event);
+    rememberParticipantsInHistory(event.participants);
     newParticipantIdsRef.current.clear();
     setEvent(createBlankEvent());
     setSelectedStationId(undefined);
@@ -414,6 +484,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
     if (!window.confirm(`恢复“${previous.title || '未命名聚餐'}”？当前内容将成为新的本地快照。`))
       return;
     await savePreviousEvent(event);
+    rememberParticipantsInHistory([...event.participants, ...previous.participants]);
     newParticipantIdsRef.current.clear();
     setEvent({ ...previous, routes: reconcileRoutes(previous) });
     setSelectedStationId(undefined);
@@ -534,15 +605,100 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
               </h2>
               <button
                 aria-label="添加参与人"
+                aria-expanded={historyOpen}
+                aria-controls="participant-history-picker"
+                className={historyOpen ? 'active' : ''}
                 onClick={() => {
-                  const participant = emptyParticipant();
-                  newParticipantIdsRef.current.add(participant.id);
-                  setEvent({ ...event, participants: [...event.participants, participant] });
+                  setHistoryOpen((open) => !open);
+                  setHistoryNotice('');
                 }}
               >
                 <Plus />
               </button>
             </div>
+            {historyOpen && (
+              <div
+                className="participant-history-picker"
+                id="participant-history-picker"
+                role="region"
+                aria-labelledby="participant-history-title"
+              >
+                <div className="history-picker-title">
+                  <span>
+                    <History />
+                    <strong id="participant-history-title">历史参与人</strong>
+                  </span>
+                  <small>保存在此浏览器</small>
+                </div>
+                {participantHistory.length ? (
+                  <>
+                    <div className="history-initials" aria-label="按姓名首字母筛选">
+                      <button
+                        className={historyInitial === 'ALL' ? 'active' : ''}
+                        aria-pressed={historyInitial === 'ALL'}
+                        onClick={() => setHistoryInitial('ALL')}
+                      >
+                        全部
+                      </button>
+                      {availableHistoryInitials.map((initial) => (
+                        <button
+                          key={initial}
+                          className={historyInitial === initial ? 'active' : ''}
+                          aria-pressed={historyInitial === initial}
+                          aria-label={`查看 ${initial} 开头的参与人`}
+                          onClick={() => setHistoryInitial(initial)}
+                        >
+                          {initial}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="history-people">
+                      {visibleHistory.map((entry, index) => {
+                        const key = participantHistoryKey(entry);
+                        const added = currentParticipantKeys.has(key);
+                        const initial = participantHistoryInitial(entry.name);
+                        const previousInitial =
+                          index > 0
+                            ? participantHistoryInitial(visibleHistory[index - 1].name)
+                            : '';
+                        return (
+                          <div className="history-person-group" key={key}>
+                            {historyInitial === 'ALL' && initial !== previousInitial && (
+                              <b className="history-letter" aria-hidden="true">
+                                {initial}
+                              </b>
+                            )}
+                            <button
+                              className="history-person"
+                              disabled={added}
+                              aria-label={`${added ? '已添加' : '添加历史参与人'} ${entry.name}${entry.note ? `，${entry.note}` : ''}`}
+                              onClick={() => addHistoricalParticipant(entry)}
+                            >
+                              <span>
+                                <strong>{entry.name}</strong>
+                                {entry.note && <small>{entry.note}</small>}
+                              </span>
+                              <em>{added ? '已添加' : '添加'}</em>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <p className="history-empty">还没有历史记录，先新建一位参与人吧。</p>
+                )}
+                <button className="history-create-button" onClick={addNewParticipant}>
+                  <UserPlus />
+                  新建参与人
+                </button>
+              </div>
+            )}
+            {historyNotice && (
+              <span className="sr-only" role="status" aria-live="polite">
+                {historyNotice}
+              </span>
+            )}
             {event.participants.map((participant) => (
               <div className="person-row" key={participant.id}>
                 <input
@@ -563,6 +719,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
                       }),
                     })
                   }
+                  onBlur={() => rememberParticipantsInHistory([participant])}
                 />
                 <input
                   value={participant.note ?? ''}
@@ -576,6 +733,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
                       }),
                     })
                   }
+                  onBlur={() => rememberParticipantsInHistory([participant])}
                 />
                 <button
                   aria-label={`删除参与人 ${participant.name || '未命名'}`}
@@ -665,6 +823,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
                 });
               }}
               onClear={async () => {
+                rememberParticipantsInHistory(event.participants);
                 await clearDraft();
                 newParticipantIdsRef.current.clear();
                 setEvent(createSampleEvent());

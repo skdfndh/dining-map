@@ -20,6 +20,7 @@
     "china-area-data": "^5.0.1",
     "idb": "^8.0.3",
     "lucide-react": "^0.468.0",
+    "pinyin-pro": "^3.29.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.1"

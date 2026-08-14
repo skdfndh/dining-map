@@ -101,3 +101,26 @@ test('editor automatically processes a selected cycling route', async ({ page })
     await expect(page.locator('.flow-route').first()).toHaveText(/算路失败/);
   }
 });
+
+test('editor filters and adds a historical participant by initial', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'dining-map:participant-history',
+      JSON.stringify([
+        { name: '张三', note: '高中同学', lastUsedAt: 2 },
+        { name: '白露', lastUsedAt: 1 },
+      ]),
+    );
+  });
+  await page.goto('/editor.html', { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('编辑器密码').fill('dinner');
+  await page.getByRole('button', { name: '入席编辑' }).click();
+
+  await page.getByRole('button', { name: '添加参与人' }).click();
+  await page.getByRole('button', { name: '查看 Z 开头的参与人' }).click();
+  await expect(page.getByRole('button', { name: /白露/ })).toHaveCount(0);
+  await page.getByRole('button', { name: '添加历史参与人 张三，高中同学' }).click();
+
+  await expect(page.getByLabel('参与人姓名：张三')).toHaveValue('张三');
+  await expect(page.getByRole('button', { name: '已添加 张三，高中同学' })).toBeDisabled();
+});

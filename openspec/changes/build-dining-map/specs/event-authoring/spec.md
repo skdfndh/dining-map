@@ -12,7 +12,7 @@ The system SHALL protect the editor entry with a configurable password-derived d
 - **THEN** the system requires the password again before exposing editing controls
 
 ### Requirement: Activity and participant authoring
-The editor SHALL allow the organizer to define an activity name, optional date, province, prefecture-level city, optional district or county, optional introduction, and a participant list with stable internal IDs. Province and city SHALL use linked administrative-area selections for newly created activities, SHALL establish an approximate map center, and SHALL remain backward compatible with imported activities that only contain the legacy city field. The activity name SHALL be required for final publication, and duplicate display names SHALL be distinguishable through optional notes.
+The editor SHALL allow the organizer to define an activity name, optional date, province, prefecture-level city, optional district or county, optional introduction, and a participant list with stable internal IDs. Province and city SHALL use linked administrative-area selections for newly created activities, SHALL establish an approximate map center, and SHALL remain backward compatible with imported activities that only contain the legacy city field. The activity name SHALL be required for final publication, and duplicate display names SHALL be distinguishable through optional notes. The editor SHALL keep a browser-local history of previously used named participants, sort and group it by Pinyin or Latin initial, and allow the organizer to filter by an available initial and add a historical person with one action. A historical selection SHALL receive a new ID for the current activity and SHALL NOT be included in public exports until selected.
 
 #### Scenario: Duplicate participant names
 - **WHEN** the organizer adds two participants with the same visible name and different notes
@@ -25,6 +25,14 @@ The editor SHALL allow the organizer to define an activity name, optional date, 
 #### Scenario: Delete a referenced participant
 - **WHEN** the organizer confirms deletion of a participant who appears in stations, expense allocations, or advances
 - **THEN** the editor removes every reference to that stable ID so no orphaned settlement or attendance data remains
+
+#### Scenario: Reuse a historical participant
+- **WHEN** the organizer opens participant choices, selects the initial `Z`, and chooses a previous participant named `张三`
+- **THEN** the editor adds `张三` and the saved note to the current activity with a newly generated stable ID
+
+#### Scenario: Distinguish duplicate historical names
+- **WHEN** two previous participants share a display name but have different notes
+- **THEN** the history keeps both choices separately and shows the note needed to identify each person
 
 ### Requirement: Station detail authoring
 The editor SHALL allow each station visit to be created independently with a stable ID, short label, full name, address, coordinates, optional POI ID, activity description, participant selection, and optional organizer reminder. Two visits at the same coordinates SHALL remain separate stations.

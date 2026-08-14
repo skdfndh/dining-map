@@ -23,6 +23,15 @@ import {
 } from '../src/storage/auth';
 import { loadViewerState, saveViewerState } from '../src/storage/viewer-state';
 import { EDITOR_PASSWORD_CONFIG } from '../src/config/editor';
+import {
+  createParticipantFromHistory,
+  loadParticipantHistory,
+  MAX_PARTICIPANT_HISTORY,
+  mergeParticipantHistory,
+  participantHistoryInitial,
+  PARTICIPANT_HISTORY_STORAGE_KEY,
+  saveParticipantHistory,
+} from '../src/storage/participant-history';
 
 describe('storage and exchange', () => {
   beforeEach(async () => {
@@ -87,5 +96,64 @@ describe('storage and exchange', () => {
 
   it('rejects oversized event files before parsing them', () => {
     expect(() => validateEventFileSize({ size: MAX_EVENT_FILE_BYTES + 1 })).toThrow('超过 5 MB');
+  });
+
+  it('sorts participant history by Pinyin initial and keeps noted names distinct', () => {
+    const history = mergeParticipantHistory(
+      [],
+      [
+        { name: '张三' },
+        { name: '阿周' },
+        { name: 'Alice' },
+        { name: '小王', note: '大学同学' },
+        { name: '小王', note: '邻居' },
+        { name: '张三' },
+        { name: '3号桌' },
+      ],
+      100,
+    );
+
+    expect(history.map((entry) => participantHistoryInitial(entry.name))).toEqual([
+      'A',
+      'A',
+      'X',
+      'X',
+      'Z',
+      '#',
+    ]);
+    expect(history.filter((entry) => entry.name === '张三')).toHaveLength(1);
+    expect(history.filter((entry) => entry.name === '小王')).toHaveLength(2);
+  });
+
+  it('keeps participant history within its local storage bound', () => {
+    const history = mergeParticipantHistory(
+      [],
+      Array.from({ length: MAX_PARTICIPANT_HISTORY + 5 }, (_, index) => ({
+        name: `参与人 ${index}`,
+      })),
+      100,
+    );
+
+    expect(history).toHaveLength(MAX_PARTICIPANT_HISTORY);
+  });
+
+  it('loads validated participant history and ignores damaged storage', () => {
+    saveParticipantHistory([{ name: ' 张三 ', note: ' 同学 ', lastUsedAt: 100 }]);
+    expect(loadParticipantHistory()).toEqual([{ name: '张三', note: '同学', lastUsedAt: 100 }]);
+
+    localStorage.setItem(PARTICIPANT_HISTORY_STORAGE_KEY, '{broken');
+    expect(loadParticipantHistory()).toEqual([]);
+    localStorage.setItem(PARTICIPANT_HISTORY_STORAGE_KEY, JSON.stringify({ name: 'not-an-array' }));
+    expect(loadParticipantHistory()).toEqual([]);
+  });
+
+  it('creates a fresh current-activity id from a historical choice', () => {
+    const entry = { name: '张三', note: '同学', lastUsedAt: 100 };
+    const first = createParticipantFromHistory(entry);
+    const second = createParticipantFromHistory(entry);
+
+    expect(first).toMatchObject({ name: '张三', note: '同学' });
+    expect(first.id).toMatch(/^person_/);
+    expect(second.id).not.toBe(first.id);
   });
 });
