@@ -13,6 +13,7 @@ import { mapReverseGeocodeResult, parseAmapRouteResult } from '../src/maps/amap-
 import { createHotspotTracker, resolveMapPickTarget } from '../src/maps/pick';
 import { areaSearchRequest, buildArea } from '../src/domain/areas';
 import { decideMapViewport } from '../src/maps/viewport';
+import { resolveOfflineAreaCenter } from '../src/domain/area-center';
 
 describe('maps and progress', () => {
   it('uses administrative codes and the matching AMap level for area lookup', () => {
@@ -35,6 +36,22 @@ describe('maps and progress', () => {
       level: 'province',
       fallbackAddress: '北京市',
     });
+  });
+
+  it('resolves an offline city center and lets districts fall back to it', () => {
+    const city = buildArea('440000', '440100');
+    const district = buildArea('440000', '440100', '440106');
+    const municipality = buildArea('110000', '110100');
+
+    expect(city && resolveOfflineAreaCenter(city)).toMatchObject({
+      lng: 113.280637,
+      lat: 23.125178,
+      system: 'GCJ02',
+    });
+    expect(district && resolveOfflineAreaCenter(district)).toEqual(
+      city && resolveOfflineAreaCenter(city),
+    );
+    expect(municipality && resolveOfflineAreaCenter(municipality)).toBeDefined();
   });
 
   it('prioritizes an explicit area recenter even when stations already exist', () => {

@@ -38,6 +38,7 @@ import { FUZZY_PERIODS } from '../domain/types';
 import { createId } from '../domain/id';
 import { removeParticipant } from '../domain/event-mutations';
 import { areaSearchRequest, buildArea, citiesFor, districtsFor, provinces } from '../domain/areas';
+import { resolveOfflineAreaCenter } from '../domain/area-center';
 import { createBlankEvent, createSampleEvent } from '../domain/sample';
 import {
   autoSortStations,
@@ -968,6 +969,17 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
                 const requestId = ++areaRequestRef.current;
                 setAreaFocusSignal(`area-request-${requestId}`);
                 setSearchMessage('正在定位所选地区…');
+                const offlineCenter = resolveOfflineAreaCenter(nextArea);
+                if (offlineCenter) {
+                  setEvent((current) => ({
+                    ...current,
+                    city: nextArea.city,
+                    area: { ...nextArea, center: offlineCenter },
+                  }));
+                  setAreaFocusSignal(`area-offline-${requestId}`);
+                  setSearchMessage(`地图已大概定位到${nextArea.district || nextArea.city}`);
+                  return;
+                }
                 try {
                   const areaSearch = areaSearchRequest(nextArea);
                   const center = await mapService.resolveAreaCenter(

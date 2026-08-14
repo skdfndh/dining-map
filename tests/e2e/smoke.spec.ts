@@ -25,15 +25,21 @@ test('editor highlights expenses and starts a blank activity', async ({ page }) 
   await expect(page.locator('.map-sdk .amap-maps')).toBeVisible();
   await page.evaluate(() => {
     const testWindow = window as unknown as {
-      AMap: { Map: { prototype: { setCity: (value: string) => void } } };
-      __areaCityCalls?: string[];
+      AMap: {
+        Map: {
+          prototype: {
+            setZoomAndCenter: (zoom: number, center: [number, number]) => void;
+          };
+        };
+      };
+      __areaCenterCalls?: [number, number][];
     };
     const prototype = testWindow.AMap.Map.prototype;
-    const originalSetCity = prototype.setCity;
-    testWindow.__areaCityCalls = [];
-    prototype.setCity = function setCity(value: string) {
-      testWindow.__areaCityCalls?.push(value);
-      originalSetCity.call(this, value);
+    const originalSetZoomAndCenter = prototype.setZoomAndCenter;
+    testWindow.__areaCenterCalls = [];
+    prototype.setZoomAndCenter = function setZoomAndCenter(zoom: number, center: [number, number]) {
+      testWindow.__areaCenterCalls?.push(center);
+      originalSetZoomAndCenter.call(this, zoom, center);
     };
   });
 
@@ -62,12 +68,16 @@ test('editor highlights expenses and starts a blank activity', async ({ page }) 
   );
   await expect
     .poll(() =>
-      page.evaluate(
-        () =>
-          (window as unknown as { __areaCityCalls?: string[] }).__areaCityCalls?.includes(
-            '440106',
-          ) ?? false,
-      ),
+      page.evaluate(() => {
+        const calls = (window as unknown as { __areaCenterCalls?: [number, number][] })
+          .__areaCenterCalls;
+        return Boolean(
+          calls?.some(
+            ([lng, lat]) =>
+              Math.abs(lng - 113.280637) < 0.000001 && Math.abs(lat - 23.125178) < 0.000001,
+          ),
+        );
+      }),
     )
     .toBe(true);
   await expect(page.locator('.map-sdk .amap-maps')).toBeVisible();

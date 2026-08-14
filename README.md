@@ -54,6 +54,10 @@ npm run build
 
 详细说明见 [`docs/usage.md`](./docs/usage.md)。
 
+## 数据来源
+
+省级和地级市近似中心点由 MIT 许可的 [Supeset/China-GeoData](https://github.com/Supeset/China-GeoData) 派生，用于省市区选择后的离线大概定位；详细版本和更新方式见 [`docs/data-attribution.md`](./docs/data-attribution.md)。
+
 ## 安全说明
 
 请勿提交真实密码、访问令牌或未限制域名的地图服务凭据。纯静态前端中的配置可被访问者查看，正式发布前应使用项目专用凭据并设置允许域名。
