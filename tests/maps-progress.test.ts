@@ -42,6 +42,7 @@ describe('maps and progress', () => {
       decideMapViewport({
         areaFocusRequested: true,
         hasAreaCenter: true,
+        hasAreaCode: true,
         hasSelectedStation: true,
         hasOverlays: true,
         dataChanged: true,
@@ -52,12 +53,24 @@ describe('maps and progress', () => {
       decideMapViewport({
         areaFocusRequested: false,
         hasAreaCenter: true,
+        hasAreaCode: true,
         hasSelectedStation: false,
         hasOverlays: false,
         dataChanged: true,
         focusRequested: false,
       }),
     ).toBe('area');
+    expect(
+      decideMapViewport({
+        areaFocusRequested: true,
+        hasAreaCenter: false,
+        hasAreaCode: true,
+        hasSelectedStation: false,
+        hasOverlays: true,
+        dataChanged: true,
+        focusRequested: false,
+      }),
+    ).toBe('area-code');
   });
 
   it('maps reverse geocoding to the nearest POI and falls back to an address', () => {

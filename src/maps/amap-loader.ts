@@ -21,6 +21,7 @@ export interface AMapMap {
   clearMap(): void;
   destroy(): void;
   resize(): void;
+  setCity(cityNameOrCode: string): void;
   setFitView(items?: AMapOverlay[], immediately?: boolean, avoid?: number[]): void;
   setZoomAndCenter(zoom: number, center: [number, number]): void;
   on(

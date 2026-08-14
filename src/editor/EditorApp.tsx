@@ -966,6 +966,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
               onRestorePrevious={restorePreviousEvent}
               onResolveAreaCenter={async (nextArea) => {
                 const requestId = ++areaRequestRef.current;
+                setAreaFocusSignal(`area-request-${requestId}`);
                 setSearchMessage('正在定位所选地区…');
                 try {
                   const areaSearch = areaSearchRequest(nextArea);
@@ -980,7 +981,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
                     city: nextArea.city,
                     area: { ...nextArea, center: { ...center, system: 'GCJ02' } },
                   }));
-                  setAreaFocusSignal(`area-${requestId}`);
+                  setAreaFocusSignal(`area-resolved-${requestId}`);
                   setSearchMessage(`地图已大概定位到${nextArea.district || nextArea.city}`);
                 } catch (error) {
                   if (requestId !== areaRequestRef.current) return;

@@ -22,6 +22,20 @@ test('editor highlights expenses and starts a blank activity', async ({ page }) 
   await page.getByLabel('编辑器密码').fill('dinner');
   await page.getByRole('button', { name: '入席编辑' }).click();
   await page.getByLabel('活动名称').fill('待恢复的周末聚餐');
+  await expect(page.locator('.map-sdk .amap-maps')).toBeVisible();
+  await page.evaluate(() => {
+    const testWindow = window as unknown as {
+      AMap: { Map: { prototype: { setCity: (value: string) => void } } };
+      __areaCityCalls?: string[];
+    };
+    const prototype = testWindow.AMap.Map.prototype;
+    const originalSetCity = prototype.setCity;
+    testWindow.__areaCityCalls = [];
+    prototype.setCity = function setCity(value: string) {
+      testWindow.__areaCityCalls?.push(value);
+      originalSetCity.call(this, value);
+    };
+  });
 
   const expenseTab = page.getByRole('button', { name: '费用', exact: true });
   await expenseTab.click();
@@ -46,6 +60,16 @@ test('editor highlights expenses and starts a blank activity', async ({ page }) 
     /地图已大概定位到天河区|暂时无法定位该行政区/,
     { timeout: 15000 },
   );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __areaCityCalls?: string[] }).__areaCityCalls?.includes(
+            '440106',
+          ) ?? false,
+      ),
+    )
+    .toBe(true);
   await expect(page.locator('.map-sdk .amap-maps')).toBeVisible();
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '恢复上个活动' }).click();

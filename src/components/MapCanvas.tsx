@@ -196,15 +196,21 @@ export function MapCanvas(props: MapCanvasProps) {
         const areaFocusRequested =
           areaFocusSignal !== undefined && previousAreaFocusSignalRef.current !== areaFocusSignal;
         const selectedStation = event.stations.find((item) => item.id === selectedStationId);
+        const areaCode =
+          event.area?.districtCode ?? event.area?.cityCode ?? event.area?.provinceCode;
         const viewportAction = decideMapViewport({
           areaFocusRequested,
           hasAreaCenter: Boolean(event.area?.center),
+          hasAreaCode: Boolean(areaCode),
           hasSelectedStation: Boolean(selectedStation),
           hasOverlays: overlays.length > 0,
           dataChanged,
           focusRequested,
         });
-        if (viewportAction === 'area' && event.area?.center) {
+        if (viewportAction === 'area-code' && areaCode) {
+          viewportModeRef.current = 'area';
+          map.setCity(areaCode);
+        } else if (viewportAction === 'area' && event.area?.center) {
           viewportModeRef.current = 'area';
           map.setZoomAndCenter(11, [event.area.center.lng, event.area.center.lat]);
         } else if (viewportAction === 'station' && selectedStation) {
