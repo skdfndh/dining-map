@@ -8,6 +8,7 @@ import {
   Clipboard,
   Compass,
   ListRestart,
+  LockKeyhole,
   Map as MapIcon,
   Navigation,
   RotateCcw,
@@ -17,14 +18,13 @@ import {
   X,
 } from 'lucide-react';
 import type { DiningEvent, EntityId, RouteSegment, Station, ViewerState } from '../domain/types';
-import { createSampleEvent } from '../domain/sample';
 import { formatStationTime } from '../domain/time';
 import { MapCanvas } from '../components/MapCanvas';
 import { amapNavigationUrl, baiduNavigationUrl } from '../maps/navigation';
 import { calculateSettlement } from '../settlement/calculate';
 import { formatYuan } from '../settlement/money';
 import { loadViewerState, saveViewerState } from '../storage/viewer-state';
-import { importEventJson } from '../export/data';
+import { decryptEventJson, parseEncryptedEnvelope } from '../export/encryption';
 import { inferCurrentStation, sanitizeViewerState } from './progress';
 
 const modeNames: Record<RouteSegment['mode'], string> = {
@@ -37,43 +37,109 @@ const modeNames: Record<RouteSegment['mode'], string> = {
 };
 
 export function ViewerApp() {
-  const [event, setEvent] = useState<DiningEvent>(createSampleEvent);
-  const [loaded, setLoaded] = useState(false);
+  const [encryptedEvent, setEncryptedEvent] = useState('');
+  const [event, setEvent] = useState<DiningEvent>();
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [password, setPassword] = useState('');
+  const [unlockError, setUnlockError] = useState('');
+  const [unlocking, setUnlocking] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('./event.enc.json', { signal: controller.signal, cache: 'no-store' })
+      .then((response) => (response.ok ? response.text() : Promise.reject()))
+      .then((text) => {
+        parseEncryptedEnvelope(text);
+        setEncryptedEvent(text);
+        setLoadState('ready');
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setLoadState('error');
+      });
+    return () => controller.abort();
+  }, []);
+
+  async function unlock(submitEvent: React.FormEvent) {
+    submitEvent.preventDefault();
+    if (!encryptedEvent || !password) return;
+    setUnlocking(true);
+    setUnlockError('');
+    try {
+      setEvent(await decryptEventJson(encryptedEvent, password));
+      setPassword('');
+    } catch {
+      setUnlockError('密码不正确，或活动文件已经损坏');
+    } finally {
+      setUnlocking(false);
+    }
+  }
+
+  if (!event) {
+    return (
+      <main className="viewer-lock-shell">
+        <section className="viewer-lock-card" aria-busy={loadState === 'loading'}>
+          <div className="invitation-thread" aria-hidden="true" />
+          <div className="viewer-wax-seal" aria-hidden="true">
+            <LockKeyhole />
+          </div>
+          <p className="eyebrow">PRIVATE DINING ROUTE</p>
+          <h1 className="display-type">打开这份聚餐邀请</h1>
+          <p className="lock-intro">行程已加密。请输入组织者单独发给你的查看密码。</p>
+          {loadState === 'error' ? (
+            <div className="lock-status lock-error" role="alert">
+              暂时无法读取活动，请稍后刷新页面。
+            </div>
+          ) : (
+            <form onSubmit={unlock}>
+              <label htmlFor="viewer-password">查看密码</label>
+              <input
+                id="viewer-password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                disabled={loadState !== 'ready' || unlocking}
+                onChange={(changeEvent) => {
+                  setPassword(changeEvent.target.value);
+                  setUnlockError('');
+                }}
+                autoFocus
+              />
+              {unlockError && (
+                <p className="lock-status lock-error" role="alert">
+                  {unlockError}
+                </p>
+              )}
+              <button disabled={loadState !== 'ready' || unlocking || !password}>
+                <LockKeyhole />
+                {loadState === 'loading'
+                  ? '正在取出邀请…'
+                  : unlocking
+                    ? '正在本地解锁…'
+                    : '解锁聚餐地图'}
+              </button>
+            </form>
+          )}
+          <small>密码只在此设备中用于本地解密，不会上传或保存。</small>
+        </section>
+      </main>
+    );
+  }
+
+  return <UnlockedViewerApp event={event} />;
+}
+
+function UnlockedViewerApp({ event }: { event: DiningEvent }) {
   const [stateLoadedForEvent, setStateLoadedForEvent] = useState<string>();
   const [state, setState] = useState<ViewerState>({ arrivedStationIds: [], mode: 'overview' });
   const [selectedStationId, setSelectedStationId] = useState<EntityId>();
   const [selectedRouteId, setSelectedRouteId] = useState<EntityId>();
   const [showExpenses, setShowExpenses] = useState(false);
-  const [loadNotice, setLoadNotice] = useState('');
   const [focusSignal, setFocusSignal] = useState('overview');
-
   useEffect(() => {
-    const controller = new AbortController();
-    let cancelled = false;
-    fetch('./event.json', { signal: controller.signal })
-      .then((response) => (response.ok ? response.text() : Promise.reject()))
-      .then((text) => {
-        const parsed = importEventJson(text);
-        if (parsed.stations.length) setEvent(parsed);
-        else setLoadNotice('当前展示示例活动，编辑器导出的 event.json 替换后即可发布真实行程。');
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return;
-        setLoadNotice('活动数据暂时无法读取，正在展示内置示例。');
-      })
-      .finally(() => {
-        if (!cancelled) setLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, []);
-  useEffect(() => {
-    if (!loaded) return;
     setState(sanitizeViewerState(event, loadViewerState(event.id)));
     setStateLoadedForEvent(event.id);
-  }, [event, loaded]);
+  }, [event]);
   useEffect(() => {
     if (stateLoadedForEvent === event.id) saveViewerState(event.id, state);
   }, [event.id, state, stateLoadedForEvent]);
@@ -169,14 +235,6 @@ export function ViewerApp() {
           <MapIcon />
         </button>
       </header>
-      {loadNotice && (
-        <div className="data-notice" role="status" aria-live="polite">
-          {loadNotice}
-          <button aria-label="关闭活动数据提示" onClick={() => setLoadNotice('')}>
-            <X />
-          </button>
-        </div>
-      )}
       <div className="viewer-tools">
         <button onClick={showOverview}>
           <Route />

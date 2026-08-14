@@ -38,6 +38,11 @@ import {
   PARTICIPANT_HISTORY_STORAGE_KEY,
   saveParticipantHistory,
 } from '../src/storage/participant-history';
+import {
+  decryptEventJson,
+  encryptEventJson,
+  parseEncryptedEnvelope,
+} from '../src/export/encryption';
 
 describe('storage and exchange', () => {
   beforeEach(async () => {
@@ -161,6 +166,36 @@ describe('storage and exchange', () => {
     expect(importEventJson(exportEventJson(event)).title).toBe(event.title);
     expect(exportSettlementCsv(event)).toContain('小林');
     expect(exportSettlementCsv(event).charCodeAt(0)).toBe(0xfeff);
+  });
+
+  it('encrypts and decrypts a complete event without exposing its metadata', async () => {
+    const event = createSampleEvent();
+    const plaintext = exportEventJson(event);
+    const password = 'test-only-strong-password';
+    const first = await encryptEventJson(plaintext, password);
+    const second = await encryptEventJson(plaintext, password);
+
+    expect(JSON.stringify(first)).not.toContain(event.title);
+    expect(first.ciphertext).not.toBe(second.ciphertext);
+    expect((await decryptEventJson(first, password)).title).toBe(event.title);
+    await expect(decryptEventJson(first, 'wrong-password-value')).rejects.toThrow('密码不正确');
+  });
+
+  it('rejects malformed or unreasonable encrypted envelopes before deriving a key', () => {
+    expect(() => parseEncryptedEnvelope('{broken')).toThrow('不是有效 JSON');
+    expect(() =>
+      parseEncryptedEnvelope(
+        JSON.stringify({
+          version: 1,
+          algorithm: 'AES-GCM-256',
+          kdf: 'PBKDF2-SHA-256',
+          iterations: 99_999,
+          salt: '',
+          iv: '',
+          ciphertext: '',
+        }),
+      ),
+    ).toThrow('版本或参数不受支持');
   });
 
   it('rejects oversized event files before parsing them', () => {

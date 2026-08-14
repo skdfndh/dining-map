@@ -10,6 +10,7 @@ import {
   FileUp,
   History,
   KeyRound,
+  LockKeyhole,
   LogOut,
   MapPin,
   PencilLine,
@@ -96,6 +97,11 @@ import {
   importEventJson,
   validateEventFileSize,
 } from '../export/data';
+import {
+  ENCRYPTED_EVENT_FILENAME,
+  encryptEventJson,
+  MIN_PUBLICATION_PASSWORD_LENGTH,
+} from '../export/encryption';
 import { calculateExpense, calculateSettlement } from '../settlement/calculate';
 import { formatYuan, parseYuan } from '../settlement/money';
 
@@ -198,6 +204,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   const [selectedRouteId, setSelectedRouteId] = useState<EntityId>();
   const [panel, setPanel] = useState<'activity' | 'station' | 'route' | 'expense'>('activity');
   const [preview, setPreview] = useState(false);
+  const [publicationOpen, setPublicationOpen] = useState(false);
   const [draftBoxOpen, setDraftBoxOpen] = useState(false);
   const [savedDrafts, setSavedDrafts] = useState<SavedDraftSummary[]>([]);
   const [draftBoxLoading, setDraftBoxLoading] = useState(false);
@@ -268,10 +275,11 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
     autosave(event, setSaveStatus);
   }, [event]);
   useEffect(() => {
-    if (!preview && !draftBoxOpen && !participantEditorOpen) return;
+    if (!preview && !publicationOpen && !draftBoxOpen && !participantEditorOpen) return;
     const closeOverlay = (keyboardEvent: KeyboardEvent) => {
       if (keyboardEvent.key !== 'Escape') return;
       if (preview) setPreview(false);
+      else if (publicationOpen) setPublicationOpen(false);
       else if (draftBoxOpen) setDraftBoxOpen(false);
       else {
         setParticipantEditorOpen(false);
@@ -281,7 +289,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
     };
     window.addEventListener('keydown', closeOverlay);
     return () => window.removeEventListener('keydown', closeOverlay);
-  }, [draftBoxOpen, participantEditorOpen, preview]);
+  }, [draftBoxOpen, participantEditorOpen, preview, publicationOpen]);
   const staleRouteSignature = event.routes
     .filter((route) => route.status === 'stale')
     .map((route) => route.identityKey)
@@ -553,6 +561,15 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
     }
     downloadText('event.json', exportEventJson(event), 'application/json;charset=utf-8');
   }
+  function openEncryptedPublication() {
+    if (blockingIssues.length) {
+      setPublishBlocked(true);
+      setSearchMessage(`还有 ${blockingIssues.length} 项阻断错误，请先处理`);
+      locateIssue(blockingIssues[0]);
+      return;
+    }
+    setPublicationOpen(true);
+  }
   function exportCsv() {
     downloadText(
       `${event.title || '聚餐'}-结算.csv`,
@@ -715,7 +732,11 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
           </button>
           <button onClick={exportJson}>
             <Download />
-            JSON
+            明文备份
+          </button>
+          <button className="encrypted-publish-button" onClick={openEncryptedPublication}>
+            <LockKeyhole />
+            加密发布
           </button>
           <button onClick={exportCsv}>
             <Download />
@@ -1302,6 +1323,9 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
           onDelete={removeSavedEvent}
         />
       )}
+      {publicationOpen && (
+        <EncryptedPublicationModal event={event} onClose={() => setPublicationOpen(false)} />
+      )}
       {preview && (
         <div
           className="modal-backdrop"
@@ -1334,6 +1358,130 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
         </div>
       )}
     </main>
+  );
+}
+
+function EncryptedPublicationModal({
+  event,
+  onClose,
+}: {
+  event: DiningEvent;
+  onClose: () => void;
+}) {
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const mismatch = Boolean(confirmation && password !== confirmation);
+
+  async function downloadEncrypted(submitEvent: React.FormEvent) {
+    submitEvent.preventDefault();
+    if (password.length < MIN_PUBLICATION_PASSWORD_LENGTH) {
+      setError(`查看密码至少需要 ${MIN_PUBLICATION_PASSWORD_LENGTH} 个字符`);
+      return;
+    }
+    if (password !== confirmation) {
+      setError('两次输入的查看密码不一致');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const envelope = await encryptEventJson(exportEventJson(event), password);
+      downloadText(
+        ENCRYPTED_EVENT_FILENAME,
+        JSON.stringify(envelope, null, 2),
+        'application/json;charset=utf-8',
+      );
+      setPassword('');
+      setConfirmation('');
+      onClose();
+    } catch (encryptionError) {
+      setError(encryptionError instanceof Error ? encryptionError.message : '加密失败，请重试');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="encrypted-publication-title"
+      onMouseDown={(mouseEvent) => {
+        if (mouseEvent.target === mouseEvent.currentTarget && !busy) onClose();
+      }}
+    >
+      <section className="encrypted-publication-modal">
+        <header>
+          <div>
+            <p className="eyebrow">SEALED INVITATION</p>
+            <h2 className="display-type" id="encrypted-publication-title">
+              加密发布活动
+            </h2>
+          </div>
+          <button className="icon-button" aria-label="关闭加密发布" onClick={onClose}>
+            <X />
+          </button>
+        </header>
+        <div className="publication-seal" aria-hidden="true">
+          <LockKeyhole />
+        </div>
+        <p className="publication-intro">
+          下载的 <code>{ENCRYPTED_EVENT_FILENAME}</code>{' '}
+          可安全放进公开仓库；活动名、地点、姓名和费用都在密文中。
+        </p>
+        <form onSubmit={downloadEncrypted}>
+          <label>
+            查看密码
+            <input
+              type="password"
+              autoComplete="new-password"
+              minLength={MIN_PUBLICATION_PASSWORD_LENGTH}
+              value={password}
+              onChange={(changeEvent) => {
+                setPassword(changeEvent.target.value);
+                setError('');
+              }}
+              autoFocus
+            />
+            <small>
+              至少 {MIN_PUBLICATION_PASSWORD_LENGTH} 个字符；请通过其他渠道单独发送给参与者。
+            </small>
+          </label>
+          <label>
+            再输入一次
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={confirmation}
+              aria-invalid={mismatch}
+              onChange={(changeEvent) => {
+                setConfirmation(changeEvent.target.value);
+                setError('');
+              }}
+            />
+          </label>
+          {error && (
+            <p className="publication-error" role="alert">
+              <AlertTriangle />
+              {error}
+            </p>
+          )}
+          <button
+            className="primary-button"
+            disabled={busy || password.length < MIN_PUBLICATION_PASSWORD_LENGTH || mismatch}
+          >
+            <LockKeyhole />
+            {busy ? '正在本地加密…' : '下载加密发布文件'}
+          </button>
+        </form>
+        <aside>
+          密码不会保存或上传。忘记密码时无法恢复此密文，请保留编辑器草稿或“明文备份”，且不要把明文备份上传到公开仓库。
+        </aside>
+      </section>
+    </div>
   );
 }
 

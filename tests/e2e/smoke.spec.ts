@@ -1,7 +1,26 @@
 import { expect, test } from '@playwright/test';
+import { createSampleEvent } from '../../src/domain/sample';
+import { exportEventJson } from '../../src/export/data';
+import { encryptEventJson } from '../../src/export/encryption';
+
+const VIEWER_TEST_PASSWORD = 'test-only-password-123';
 
 test('viewer shows map-first activity and expenses', async ({ page }) => {
+  const envelope = await encryptEventJson(
+    exportEventJson(createSampleEvent()),
+    VIEWER_TEST_PASSWORD,
+  );
+  await page.route('**/event.enc.json', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(envelope),
+    }),
+  );
   await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { name: '打开这份聚餐邀请' })).toBeVisible();
+  await page.getByLabel('查看密码').fill(VIEWER_TEST_PASSWORD);
+  await page.getByRole('button', { name: '解锁聚餐地图' }).click();
   await expect(page.getByRole('heading', { name: '秋日朋友聚餐' })).toBeVisible();
   await page.getByRole('button', { name: /老街火锅/ }).click();
   await expect(page.getByRole('heading', { name: '老街火锅馆' })).toBeVisible();
@@ -25,7 +44,7 @@ test('editor locates a blocking publication error and focuses its field', async 
   const titleInput = page.getByLabel('活动名称');
   await titleInput.fill('');
   await page.getByRole('button', { name: '费用', exact: true }).click();
-  await page.getByRole('button', { name: 'JSON', exact: true }).click();
+  await page.getByRole('button', { name: '明文备份', exact: true }).click();
 
   const blockingAlert = page.getByRole('alert');
   await expect(blockingAlert).toContainText('还有 1 项阻断错误');

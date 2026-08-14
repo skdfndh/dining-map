@@ -56,3 +56,25 @@ The implementation SHALL expose framework-independent TypeScript modules for eve
 #### Scenario: Calculate settlement outside editor UI
 - **WHEN** a caller supplies valid event-domain objects directly to the settlement module
 - **THEN** the module returns deterministic totals and transfers without requiring a DOM or map instance
+
+### Requirement: Encrypted static publication
+The system SHALL publish real activity data as a versioned AES-256-GCM encrypted envelope derived from a viewing password with PBKDF2-SHA-256. The public envelope SHALL contain no plaintext activity metadata, SHALL use a fresh random salt and initialization vector for every export, and SHALL enforce bounded file size and cryptographic parameters before key derivation. Plain `event.json` SHALL remain an organizer-only backup/import format and SHALL NOT be required by the public viewer.
+
+#### Scenario: Publish to a public repository
+- **WHEN** the organizer encrypts a structurally valid activity with a sufficiently long viewing password
+- **THEN** the downloaded `event.enc.json` contains only encryption parameters and ciphertext, and does not contain the activity title, participant names, addresses, or amounts in plaintext
+
+#### Scenario: Re-export the same activity
+- **WHEN** the organizer encrypts identical activity JSON twice with the same password
+- **THEN** the two envelopes use different random salt and initialization vector values and produce different ciphertext
+
+### Requirement: Browser-local viewer unlock
+The public viewer SHALL fetch only the encrypted activity file, SHALL display no activity metadata before successful decryption, and SHALL decrypt and validate the activity in the browser without transmitting or persisting the viewing password. A refresh SHALL require the password again. Wrong passwords and authenticated-ciphertext failures SHALL return one generic error.
+
+#### Scenario: Unlock a valid invitation
+- **WHEN** a participant supplies the correct password for the published envelope
+- **THEN** the viewer decrypts and validates the activity locally and opens the normal map experience
+
+#### Scenario: Enter a wrong password
+- **WHEN** a participant supplies a password that cannot authenticate the ciphertext
+- **THEN** the viewer keeps all activity fields hidden and reports that the password is incorrect or the activity file is damaged

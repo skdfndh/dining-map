@@ -135,3 +135,10 @@ The editor SHALL provide a mobile viewer preview and SHALL run validation before
 #### Scenario: Block invalid final settlement
 - **WHEN** the organizer attempts to mark settlement complete while an expense is unbalanced
 - **THEN** the editor identifies the blocking error and refuses the completed status
+
+### Requirement: Password-protected static publication export
+The editor SHALL provide a distinct encrypted-publication action for public static hosting, require a viewing password of at least 12 characters with confirmation, and generate the encrypted activity entirely in the browser. It SHALL label plaintext JSON as a private backup and warn the organizer not to upload it to a public repository. The viewing password SHALL NOT be saved with drafts or the encrypted file.
+
+#### Scenario: Create a public encrypted file
+- **WHEN** a valid activity has a matching viewing password and confirmation
+- **THEN** the editor downloads `event.enc.json`, clears the password fields, and leaves the browser draft unchanged

@@ -129,7 +129,7 @@ describe('editor publication validation', () => {
     const titleInput = screen.getByLabelText('活动名称');
     fireEvent.change(titleInput, { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '费用' }));
-    fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
+    fireEvent.click(screen.getByRole('button', { name: '明文备份' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('还有 1 项阻断错误');
     expect(screen.getByRole('alert')).toHaveTextContent('活动名称不能为空');
@@ -142,5 +142,18 @@ describe('editor publication validation', () => {
     fireEvent.change(focusedTitleInput, { target: { value: '补充后的聚餐名称' } });
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
     expect(focusedTitleInput).toHaveAttribute('aria-invalid', 'false');
+  });
+
+  it('opens encrypted publication and validates the viewing password', async () => {
+    grantEditorSession();
+    render(<EditorApp />);
+
+    await screen.findByText('草稿已保存');
+    fireEvent.click(screen.getByRole('button', { name: '加密发布' }));
+    expect(screen.getByRole('dialog', { name: '加密发布活动' })).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText(/^查看密码/), { target: { value: 'short' } });
+    fireEvent.change(screen.getByLabelText('再输入一次'), { target: { value: 'different' } });
+    expect(screen.getByRole('button', { name: '下载加密发布文件' })).toBeDisabled();
   });
 });
