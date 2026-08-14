@@ -124,3 +124,31 @@ test('editor filters and adds a historical participant by initial', async ({ pag
   await expect(page.getByLabel('参与人姓名：张三')).toHaveValue('张三');
   await expect(page.getByRole('button', { name: '已添加 张三，高中同学' })).toBeDisabled();
 });
+
+test('editor restores and deletes activities from the automatic draft box', async ({ page }) => {
+  await page.goto('/editor.html', { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('编辑器密码').fill('dinner');
+  await page.getByRole('button', { name: '入席编辑' }).click();
+  await page.getByLabel('活动名称').fill('草稿箱里的旧聚餐');
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: '新建聚餐' }).click();
+  await page.getByLabel('活动名称').fill('正在编辑的新聚餐');
+  const saveState = page.locator('.save-state');
+  await expect(saveState).toContainText('保存中');
+  await expect(saveState).toContainText('草稿已保存');
+  await page.getByRole('button', { name: '草稿箱', exact: true }).click();
+
+  const oldDraft = page.locator('.draft-card', { hasText: '草稿箱里的旧聚餐' });
+  await expect(page.locator('.draft-card', { hasText: '正在编辑的新聚餐' })).toBeVisible();
+  await expect(oldDraft).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept());
+  await oldDraft.getByRole('button', { name: '恢复' }).click();
+  await expect(page.getByLabel('活动名称')).toHaveValue('草稿箱里的旧聚餐');
+
+  await page.getByRole('button', { name: '草稿箱', exact: true }).click();
+  const newDraft = page.locator('.draft-card', { hasText: '正在编辑的新聚餐' });
+  page.once('dialog', (dialog) => dialog.accept());
+  await newDraft.getByRole('button', { name: '删除草稿 正在编辑的新聚餐' }).click();
+  await expect(newDraft).toHaveCount(0);
+});

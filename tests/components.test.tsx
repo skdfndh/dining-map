@@ -65,6 +65,18 @@ describe('editor participants', () => {
     expect(nameInput).toHaveValue('未命名');
   });
 
+  it('opens the draft box as a dialog and closes it with Escape', async () => {
+    grantEditorSession();
+    render(<EditorApp />);
+
+    await screen.findByText('草稿已保存');
+    fireEvent.click(screen.getByRole('button', { name: '草稿箱' }));
+    expect(await screen.findByRole('dialog', { name: '草稿箱' })).toBeVisible();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: '草稿箱' })).not.toBeInTheDocument();
+  });
+
   it('filters historical participants by initial and adds one with a new id', async () => {
     grantEditorSession();
     saveParticipantHistory([

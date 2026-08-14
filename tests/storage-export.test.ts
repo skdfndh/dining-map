@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSampleEvent } from '../src/domain/sample';
+import { createBlankEvent } from '../src/domain/sample';
+import { openDB } from 'idb';
 import {
   exportEventJson,
   exportSettlementCsv,
@@ -9,8 +11,12 @@ import {
 } from '../src/export/data';
 import {
   clearDraft,
+  deleteSavedDraft,
+  listSavedDrafts,
   loadDraft,
   loadPreviousEvent,
+  loadSavedDraft,
+  MAX_SAVED_DRAFTS,
   loadSnapshot,
   saveDraft,
   savePreviousEvent,
@@ -55,6 +61,69 @@ describe('storage and exchange', () => {
     await saveDraft({ ...previous, id: 'event_new', title: '新的聚餐' });
     expect((await loadPreviousEvent())?.id).toBe(previous.id);
     expect((await loadPreviousEvent())?.title).toBe(previous.title);
+  });
+
+  it('lists, restores, and deletes automatic drafts by activity', async () => {
+    const first = { ...createSampleEvent(), title: '春日聚餐' };
+    const second = { ...createBlankEvent(), title: '夏夜聚餐' };
+    await saveDraft(first);
+    await saveDraft(second);
+
+    const drafts = await listSavedDrafts();
+    expect(drafts.map((draft) => draft.title)).toEqual(
+      expect.arrayContaining(['春日聚餐', '夏夜聚餐']),
+    );
+    expect(await loadSavedDraft(first.id)).toMatchObject({ id: first.id, title: '春日聚餐' });
+
+    await deleteSavedDraft(first.id);
+    expect(await loadSavedDraft(first.id)).toBeUndefined();
+    expect(await loadDraft()).toMatchObject({ id: second.id, title: '夏夜聚餐' });
+  });
+
+  it('deduplicates rolling and legacy draft records for the same activity', async () => {
+    const event = createSampleEvent();
+    await savePreviousEvent(event);
+    await saveDraft(event);
+    await saveDraft({ ...event, title: '同一活动的新名称' });
+
+    const drafts = await listSavedDrafts();
+    expect(drafts.filter((draft) => draft.id === event.id)).toHaveLength(1);
+    expect(drafts.find((draft) => draft.id === event.id)?.title).toBe('同一活动的新名称');
+  });
+
+  it('protects the current automatic draft from individual deletion', async () => {
+    const event = createSampleEvent();
+    await saveDraft(event);
+
+    await expect(deleteSavedDraft(event.id)).rejects.toThrow('当前正在编辑');
+    expect(await loadSavedDraft(event.id)).toBeDefined();
+  });
+
+  it('ignores damaged draft-box records without hiding valid activities', async () => {
+    const event = createSampleEvent();
+    await saveDraft(event);
+    const db = await openDB('dining-map-editor', 1);
+    await db.put(
+      'drafts',
+      { kind: 'activity-draft', savedAt: Date.now(), event: { id: 'broken' } },
+      'activity:broken',
+    );
+
+    const drafts = await listSavedDrafts();
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0].id).toBe(event.id);
+  });
+
+  it('bounds the draft box while keeping the latest current activity', async () => {
+    let latest = createBlankEvent();
+    for (let index = 0; index < MAX_SAVED_DRAFTS + 2; index += 1) {
+      latest = { ...createBlankEvent(), title: `活动 ${index}` };
+      await saveDraft(latest);
+    }
+
+    const drafts = await listSavedDrafts();
+    expect(drafts).toHaveLength(MAX_SAVED_DRAFTS);
+    expect(drafts.some((draft) => draft.id === latest.id)).toBe(true);
   });
 
   it('isolates viewer state by activity', () => {

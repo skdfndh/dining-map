@@ -83,7 +83,7 @@ The editor SHALL compare adjacent station times with the route duration and SHAL
 - **THEN** the editor reports an expected 20-minute conflict and still permits export
 
 ### Requirement: Durable draft workflow
-The editor SHALL automatically save changes locally, display save status, restore the latest draft on a later visit, allow the draft to be cleared, create a new blank activity without reusing entity IDs, and allow a previously exported event file to be imported for continued editing. Creating a new activity SHALL require confirmation and preserve the previous activity as a recoverable snapshot.
+The editor SHALL automatically save changes locally, display save status, restore the latest draft on a later visit, and provide a bounded draft box containing the latest valid saved version of each activity. The draft box SHALL identify activities by stable activity ID, show enough metadata to distinguish them, allow a non-current activity to be restored or deleted, and ignore damaged entries. Restoring another draft SHALL save the current activity first. The editor SHALL also allow all local drafts to be cleared, create a new blank activity without reusing entity IDs, and allow a previously exported event file to be imported for continued editing. Creating a new activity SHALL require confirmation and preserve the previous activity as a recoverable snapshot.
 
 #### Scenario: Resume after closing browser
 - **WHEN** the organizer returns after closing the editor with a successfully saved draft
@@ -92,6 +92,18 @@ The editor SHALL automatically save changes locally, display save status, restor
 #### Scenario: Start another dining activity
 - **WHEN** the organizer confirms the new-activity action while editing an existing activity
 - **THEN** the editor saves the existing activity as a recoverable snapshot and opens a blank activity with a new stable ID
+
+#### Scenario: Restore an older automatic draft
+- **WHEN** the organizer opens the draft box and selects a saved activity different from the current activity
+- **THEN** the editor saves the current activity, restores the selected activity with its stable IDs, and makes it the new current draft
+
+#### Scenario: Delete a stored activity draft
+- **WHEN** the organizer confirms deletion of a non-current activity in the draft box
+- **THEN** the editor removes every stored draft record for that activity without clearing unrelated activities
+
+#### Scenario: Ignore a damaged draft entry
+- **WHEN** one IndexedDB draft entry is malformed or fails event validation
+- **THEN** the draft box omits that entry and remains able to list and restore other valid activities
 
 ### Requirement: Publication preview and validation
 The editor SHALL provide a mobile viewer preview and SHALL run validation before export. Validation SHALL distinguish blocking errors from non-blocking warnings and SHALL permit incomplete settlement data to be exported as a draft or organizing-in-progress event.

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  Archive,
   ArrowDown,
   ArrowUp,
   Check,
@@ -59,9 +60,14 @@ import {
 import {
   clearDraft,
   createDraftAutosaver,
+  deleteSavedDraft,
+  listSavedDrafts,
   loadDraft,
   loadPreviousEvent,
+  loadSavedDraft,
+  saveDraft,
   savePreviousEvent,
+  type SavedDraftSummary,
 } from '../storage/draft-store';
 import {
   clearEditorSession,
@@ -182,10 +188,16 @@ function LoginGate({ onSuccess }: { onSuccess: () => void }) {
 function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   const [event, setEvent] = useState<DiningEvent>(createSampleEvent);
   const [saveStatus, setSaveStatus] = useState<'loading' | 'saving' | 'saved' | 'error'>('loading');
+  const [draftReady, setDraftReady] = useState(false);
+  const [eventSwitching, setEventSwitching] = useState(false);
   const [selectedStationId, setSelectedStationId] = useState<EntityId>();
   const [selectedRouteId, setSelectedRouteId] = useState<EntityId>();
   const [panel, setPanel] = useState<'activity' | 'station' | 'route' | 'expense'>('activity');
   const [preview, setPreview] = useState(false);
+  const [draftBoxOpen, setDraftBoxOpen] = useState(false);
+  const [savedDrafts, setSavedDrafts] = useState<SavedDraftSummary[]>([]);
+  const [draftBoxLoading, setDraftBoxLoading] = useState(false);
+  const [draftBoxNotice, setDraftBoxNotice] = useState('');
   const [draggingStationId, setDraggingStationId] = useState<EntityId>();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<PlaceCandidate[]>([]);
@@ -223,29 +235,38 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   );
 
   useEffect(() => {
-    loadDraft().then((draft) => {
-      const restoredEvent = draft ? { ...draft, routes: reconcileRoutes(draft) } : eventRef.current;
-      if (draft) {
-        newParticipantIdsRef.current.clear();
-        setEvent(restoredEvent);
-      }
-      rememberParticipantsInHistory(restoredEvent.participants);
-      draftLoadedRef.current = true;
-      setSaveStatus('saved');
-    });
+    loadDraft()
+      .then((draft) => {
+        const restoredEvent = draft
+          ? { ...draft, routes: reconcileRoutes(draft) }
+          : eventRef.current;
+        if (draft) {
+          newParticipantIdsRef.current.clear();
+          setEvent(restoredEvent);
+        }
+        rememberParticipantsInHistory(restoredEvent.participants);
+        setSaveStatus('saved');
+      })
+      .catch(() => setSaveStatus('error'))
+      .finally(() => {
+        draftLoadedRef.current = true;
+        setDraftReady(true);
+      });
   }, []);
   useEffect(() => {
     if (!draftLoadedRef.current) return;
     autosave(event, setSaveStatus);
   }, [event]);
   useEffect(() => {
-    if (!preview) return;
-    const closePreview = (keyboardEvent: KeyboardEvent) => {
-      if (keyboardEvent.key === 'Escape') setPreview(false);
+    if (!preview && !draftBoxOpen) return;
+    const closeOverlay = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key !== 'Escape') return;
+      if (preview) setPreview(false);
+      else setDraftBoxOpen(false);
     };
-    window.addEventListener('keydown', closePreview);
-    return () => window.removeEventListener('keydown', closePreview);
-  }, [preview]);
+    window.addEventListener('keydown', closeOverlay);
+    return () => window.removeEventListener('keydown', closeOverlay);
+  }, [draftBoxOpen, preview]);
   const staleRouteSignature = event.routes
     .filter((route) => route.status === 'stale')
     .map((route) => route.identityKey)
@@ -277,6 +298,23 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   const bulkSchedule = useMemo(() => fillSortableUnscheduledStations(event), [event]);
   const selectedStation = event.stations.find((station) => station.id === selectedStationId);
   const selectedRoute = event.routes.find((route) => route.id === selectedRouteId);
+
+  if (!draftReady || eventSwitching) {
+    return (
+      <main className="editor-loading-shell" aria-busy="true">
+        <section>
+          <Archive />
+          <p className="eyebrow">LOCAL DRAFT ARCHIVE</p>
+          <h1 className="display-type">{draftReady ? '正在切换活动' : '正在打开草稿'}</h1>
+          <p>
+            {draftReady
+              ? '先保存当前内容，再安全打开另一份活动。'
+              : '先确认浏览器里最近保存的活动，再进入编排台。'}
+          </p>
+        </section>
+      </main>
+    );
+  }
 
   function commit(next: DiningEvent) {
     setEvent({ ...next, routes: reconcileRoutes(next), updatedAt: new Date().toISOString() });
@@ -435,6 +473,7 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
   }
   async function importFile(file: File) {
     const current = event;
+    setEventSwitching(true);
     try {
       validateEventFileSize(file);
       const parsed = importEventJson(await file.text());
@@ -445,6 +484,8 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
     } catch (error) {
       setEvent(current);
       setSearchMessage(error instanceof Error ? `导入失败：${error.message}` : '导入失败');
+    } finally {
+      setEventSwitching(false);
     }
   }
   function exportJson() {
@@ -462,35 +503,109 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
       'text/csv;charset=utf-8',
     );
   }
+  async function openDraftBox() {
+    setDraftBoxOpen(true);
+    setDraftBoxLoading(true);
+    setDraftBoxNotice('');
+    try {
+      setSaveStatus('saving');
+      await saveDraft(event);
+      setSaveStatus('saved');
+      setSavedDrafts(await listSavedDrafts());
+    } catch {
+      setSaveStatus('error');
+      setDraftBoxNotice('草稿箱暂时无法读取，当前编辑内容仍保留在页面中');
+    } finally {
+      setDraftBoxLoading(false);
+    }
+  }
+  async function restoreSavedEvent(draft: SavedDraftSummary) {
+    if (draft.id === event.id) return;
+    if (!window.confirm(`恢复“${draft.title}”？当前活动会先保存到草稿箱。`)) return;
+    setDraftBoxLoading(true);
+    setEventSwitching(true);
+    setDraftBoxNotice('');
+    try {
+      await saveDraft(event);
+      const restored = await loadSavedDraft(draft.id);
+      if (!restored) {
+        setDraftBoxNotice('这个草稿已不存在或数据损坏，请刷新草稿箱');
+        setSavedDrafts(await listSavedDrafts());
+        return;
+      }
+      rememberParticipantsInHistory([...event.participants, ...restored.participants]);
+      newParticipantIdsRef.current.clear();
+      setEvent({ ...restored, routes: reconcileRoutes(restored) });
+      setSelectedStationId(undefined);
+      setSelectedRouteId(undefined);
+      setPanel('activity');
+      setDraftBoxOpen(false);
+      setSearchMessage(`已从草稿箱恢复“${draft.title}”`);
+    } catch {
+      setDraftBoxNotice('恢复失败，当前活动没有被替换');
+    } finally {
+      setDraftBoxLoading(false);
+      setEventSwitching(false);
+    }
+  }
+  async function removeSavedEvent(draft: SavedDraftSummary) {
+    if (draft.id === event.id) return;
+    if (!window.confirm(`从草稿箱删除“${draft.title}”？此操作不会影响其他活动。`)) return;
+    setDraftBoxLoading(true);
+    setDraftBoxNotice('');
+    try {
+      await deleteSavedDraft(draft.id);
+      setSavedDrafts(await listSavedDrafts());
+      setDraftBoxNotice(`已删除“${draft.title}”`);
+    } catch (error) {
+      setDraftBoxNotice(error instanceof Error ? error.message : '删除草稿失败');
+    } finally {
+      setDraftBoxLoading(false);
+    }
+  }
   async function startNewEvent() {
     if (!window.confirm('新建聚餐安排？当前活动会保留为可恢复的上一个活动。')) return;
-    await savePreviousEvent(event);
-    rememberParticipantsInHistory(event.participants);
-    newParticipantIdsRef.current.clear();
-    setEvent(createBlankEvent());
-    setSelectedStationId(undefined);
-    setSelectedRouteId(undefined);
-    setPanel('activity');
-    setSearchQuery('');
-    setSearchResults([]);
-    setSearchMessage('已新建空白聚餐；需要时可在活动面板恢复上个活动');
+    setEventSwitching(true);
+    try {
+      await savePreviousEvent(event);
+      rememberParticipantsInHistory(event.participants);
+      newParticipantIdsRef.current.clear();
+      setEvent(createBlankEvent());
+      setSelectedStationId(undefined);
+      setSelectedRouteId(undefined);
+      setPanel('activity');
+      setSearchQuery('');
+      setSearchResults([]);
+      setSearchMessage('已新建空白聚餐；需要时可从草稿箱恢复其他活动');
+    } catch {
+      setSearchMessage('当前活动保存失败，未新建聚餐');
+    } finally {
+      setEventSwitching(false);
+    }
   }
   async function restorePreviousEvent() {
-    const previous = await loadPreviousEvent();
-    if (!previous) {
-      setSearchMessage('暂时没有可恢复的上个活动');
-      return;
+    setEventSwitching(true);
+    try {
+      const previous = await loadPreviousEvent();
+      if (!previous) {
+        setSearchMessage('暂时没有可恢复的上个活动');
+        return;
+      }
+      if (!window.confirm(`恢复“${previous.title || '未命名聚餐'}”？当前内容将成为新的本地快照。`))
+        return;
+      await savePreviousEvent(event);
+      rememberParticipantsInHistory([...event.participants, ...previous.participants]);
+      newParticipantIdsRef.current.clear();
+      setEvent({ ...previous, routes: reconcileRoutes(previous) });
+      setSelectedStationId(undefined);
+      setSelectedRouteId(undefined);
+      setPanel('activity');
+      setSearchMessage('已恢复上个活动');
+    } catch {
+      setSearchMessage('当前活动保存失败，未恢复上个活动');
+    } finally {
+      setEventSwitching(false);
     }
-    if (!window.confirm(`恢复“${previous.title || '未命名聚餐'}”？当前内容将成为新的本地快照。`))
-      return;
-    await savePreviousEvent(event);
-    rememberParticipantsInHistory([...event.participants, ...previous.participants]);
-    newParticipantIdsRef.current.clear();
-    setEvent({ ...previous, routes: reconcileRoutes(previous) });
-    setSelectedStationId(undefined);
-    setSelectedRouteId(undefined);
-    setPanel('activity');
-    setSearchMessage('已恢复上个活动');
   }
 
   return (
@@ -523,6 +638,10 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
           <button className="new-event-button" onClick={startNewEvent}>
             <Plus />
             新建聚餐
+          </button>
+          <button onClick={openDraftBox}>
+            <Archive />
+            草稿箱
           </button>
           <button onClick={() => importedRef.current?.click()}>
             <FileUp />
@@ -823,10 +942,24 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
                 });
               }}
               onClear={async () => {
-                rememberParticipantsInHistory(event.participants);
-                await clearDraft();
-                newParticipantIdsRef.current.clear();
-                setEvent(createSampleEvent());
+                if (
+                  !window.confirm(
+                    '清空整个草稿箱并恢复示例？所有本地活动草稿都会删除，此操作无法撤销。',
+                  )
+                )
+                  return;
+                setEventSwitching(true);
+                try {
+                  rememberParticipantsInHistory(event.participants);
+                  await clearDraft();
+                  newParticipantIdsRef.current.clear();
+                  setEvent(createSampleEvent());
+                  setSearchMessage('已清空整个草稿箱并恢复示例活动');
+                } catch {
+                  setSearchMessage('草稿箱清空失败，当前活动没有被替换');
+                } finally {
+                  setEventSwitching(false);
+                }
               }}
               onRestorePrevious={restorePreviousEvent}
               onResolveAreaCenter={async (nextArea) => {
@@ -970,6 +1103,17 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
       </footer>
+      {draftBoxOpen && (
+        <DraftBoxModal
+          drafts={savedDrafts}
+          currentEventId={event.id}
+          loading={draftBoxLoading}
+          notice={draftBoxNotice}
+          onClose={() => setDraftBoxOpen(false)}
+          onRestore={restoreSavedEvent}
+          onDelete={removeSavedEvent}
+        />
+      )}
       {preview && (
         <div
           className="modal-backdrop"
@@ -1002,6 +1146,114 @@ function EditorWorkspace({ onLogout }: { onLogout: () => void }) {
         </div>
       )}
     </main>
+  );
+}
+
+function DraftBoxModal({
+  drafts,
+  currentEventId,
+  loading,
+  notice,
+  onClose,
+  onRestore,
+  onDelete,
+}: {
+  drafts: SavedDraftSummary[];
+  currentEventId: string;
+  loading: boolean;
+  notice: string;
+  onClose: () => void;
+  onRestore: (draft: SavedDraftSummary) => void;
+  onDelete: (draft: SavedDraftSummary) => void;
+}) {
+  const savedTime = new Intl.DateTimeFormat('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return (
+    <div
+      className="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="draft-box-title"
+      onMouseDown={(mouseEvent) => {
+        if (mouseEvent.target === mouseEvent.currentTarget) onClose();
+      }}
+    >
+      <section className="draft-box-modal">
+        <header>
+          <div>
+            <p className="eyebrow">LOCAL DRAFT ARCHIVE</p>
+            <h2 className="display-type" id="draft-box-title">
+              草稿箱
+            </h2>
+            <p>每个活动保留最新一次自动保存，仅存放在这个浏览器。</p>
+          </div>
+          <button className="icon-button" aria-label="关闭草稿箱" autoFocus onClick={onClose}>
+            <X />
+          </button>
+        </header>
+        {notice && (
+          <p className="draft-box-notice" role="status" aria-live="polite">
+            {notice}
+          </p>
+        )}
+        {loading && !drafts.length ? (
+          <p className="draft-box-empty">正在整理本地草稿…</p>
+        ) : drafts.length ? (
+          <div className="draft-card-list" aria-busy={loading}>
+            {drafts.map((draft) => {
+              const current = draft.id === currentEventId;
+              return (
+                <article className={`draft-card ${current ? 'current' : ''}`} key={draft.id}>
+                  <div className="draft-card-main">
+                    <span className="draft-card-mark" aria-hidden="true">
+                      <Archive />
+                    </span>
+                    <div>
+                      <div className="draft-card-title">
+                        <h3>{draft.title}</h3>
+                        {current && <b>正在编辑</b>}
+                      </div>
+                      <p>
+                        {draft.date || '日期待定'} · {draft.area}
+                      </p>
+                      <small>
+                        {draft.stationCount} 个地点 · {draft.participantCount} 位参与人 ·{' '}
+                        {draft.savedAt ? savedTime.format(draft.savedAt) : '旧版记录'}
+                      </small>
+                    </div>
+                  </div>
+                  <div className="draft-card-actions">
+                    <button
+                      className="secondary-button"
+                      disabled={current || loading}
+                      onClick={() => onRestore(draft)}
+                    >
+                      <RefreshCw />
+                      {current ? '当前草稿' : '恢复'}
+                    </button>
+                    <button
+                      className="draft-delete-button"
+                      aria-label={`删除草稿 ${draft.title}`}
+                      disabled={current || loading}
+                      title={current ? '请先切换或新建其他活动' : '删除这个草稿'}
+                      onClick={() => onDelete(draft)}
+                    >
+                      <Trash2 />
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="draft-box-empty">还没有可选择的活动草稿。</p>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -1092,7 +1344,7 @@ function ActivityInspector({
         恢复上个活动
       </button>
       <button className="danger-link" onClick={onClear}>
-        清空本地草稿并恢复示例
+        清空整个草稿箱并恢复示例
       </button>
     </div>
   );
