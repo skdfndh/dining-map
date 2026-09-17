@@ -13,6 +13,9 @@ test-results/
 config/local.*
 config/secrets.*
 public/runtime-config.local.*
+apps/miniprogram/config/local.ts
+cloudfunctions/**/.env
+cloudfunctions/**/.runtimeconfig.json
 
 # Local drafts and exports
 drafts/
@@ -36,3 +39,21 @@ npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# 密钥文件——绝不入库（.env 系列已在上方覆盖）
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+.netrc
+_netrc
+
+# 扫描报告产物：报告本身含敏感位置清单，属于隐私文件
+report.json
+report.md
+*-privacy-scan/
+

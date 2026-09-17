@@ -1,0 +1,19 @@
+# 默认：仓库内统一使用 LF，避免 Windows 用户提交后整个仓库显示为改动
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制文件：禁止换行符转换与文本 diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.svg text
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.zip binary
