@@ -1,5 +1,7 @@
 # Dining Map / 聚餐地图
 
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+
 一个面向聚餐活动的静态地图模板：组织者在桌面编辑地点、时间、参与人、交通与费用，参与者在手机地图中查看行程、导航、记录个人进度并查看 AA 结算。
 
 ## 当前状态
@@ -22,6 +24,8 @@
 ## 本地运行
 
 ```bash
+git clone https://github.com/skdfndh/dining-map.git
+cd dining-map
 npm install
 copy .env.example .env.local
 npm run dev
@@ -61,3 +65,9 @@ npm run build
 ## 安全说明
 
 公开仓库只应提交 `event.enc.json`，不要提交明文 `event.json`、查看密码、访问令牌或未限制域名的地图服务凭据。查看密码只在参与者浏览器中本地解密；任何拿到密码的人仍可保存活动内容，因此应为每次活动使用不同的强密码并单独发送。
+
+## 许可证
+
+本项目代码以 [MIT](LICENSE) 许可发布，© 2026 kddsk。
+
+需要区分的是：上文「数据来源」中提到的行政区划中心点数据派生自第三方公开数据源，遵循其原有许可与署名要求，不受本项目 MIT 许可覆盖，详见 [`docs/data-attribution.md`](./docs/data-attribution.md)。地图服务由高德地图提供，使用受高德开放平台服务条款约束。
